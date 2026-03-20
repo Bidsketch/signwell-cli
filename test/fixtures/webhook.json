@@ -1,0 +1,7 @@
+{
+  "id": "hook_abc123",
+  "url": "https://myapp.com/webhooks/signwell",
+  "event_types": ["document_completed", "document_signed"],
+  "secret": "whsec_test123",
+  "created_at": "2024-01-25T10:00:00Z"
+}

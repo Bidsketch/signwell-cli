@@ -1,0 +1,10 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.env
+.env.*
+coverage/
+.DS_Store
+.claude/
+CLI_TEST_SPEC.md
+docs/

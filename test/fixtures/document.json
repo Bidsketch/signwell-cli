@@ -1,0 +1,23 @@
+{
+  "id": "doc_abc123",
+  "name": "Service Agreement",
+  "status": "pending",
+  "created_at": "2024-01-15T10:00:00Z",
+  "updated_at": "2024-01-15T10:00:00Z",
+  "subject": "Please sign: Service Agreement",
+  "recipients": [
+    {
+      "id": "rec_001",
+      "email": "alice@example.com",
+      "name": "Alice Smith",
+      "status": "pending",
+      "signing_url": "https://www.signwell.com/sign/abc123"
+    }
+  ],
+  "files": [
+    {
+      "name": "contract.pdf"
+    }
+  ],
+  "test_mode": true
+}
