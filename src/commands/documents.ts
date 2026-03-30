@@ -73,43 +73,42 @@ export function registerDocumentsCommand(yargs: Argv): Argv {
             const recipients = (argv.recipient as string[]).map(parseRecipient);
             const docName = (argv.name as string) || files[0]?.name || 'Untitled';
 
+            let hasEmbedded = false;
+            const mappedRecipients = recipients.map((r, i) => {
+              if (r.embedded) hasEmbedded = true;
+              return {
+                email: r.email,
+                name: r.name,
+                ...(argv.signingOrder ? { signing_order: i + 1 } : {}),
+              };
+            });
+
             const doc = await docsApi.createDocument({
               name: docName,
               subject: argv.subject as string | undefined,
               message: argv.message as string | undefined,
-              draft: argv.send ? true : argv.draft as boolean,
+              draft: argv.draft as boolean,
               text_tags: argv.textTags as boolean | undefined,
               redirect_url: argv.redirectUrl as string | undefined,
-              signing_order: argv.signingOrder as boolean | undefined,
+              apply_signing_order: argv.signingOrder as boolean | undefined,
+              embedded_signing: hasEmbedded ? true : undefined,
               expires_in: argv.expirationDays as number | undefined,
               reminders: argv.reminderDays as number[] | undefined,
               files,
-              recipients: recipients.map((r) => ({
-                email: r.email,
-                name: r.name,
-                embedded_signing: r.embedded,
-              })),
+              recipients: mappedRecipients,
             });
 
-            // Send if requested
-            let result = doc;
-            if (argv.send && !argv.draft) {
-              spin.text = 'Sending document...';
-              result = await docsApi.sendDocument(doc.id);
-              spin.succeed('Document created and sent');
-            } else {
-              spin.succeed(argv.draft ? 'Draft created' : 'Document created');
-            }
+            spin.succeed(argv.draft ? 'Draft created' : 'Document created');
 
             if (isJsonMode()) {
-              printJson(result);
+              printJson(doc);
             } else {
-              printInfo(`Document ID: ${result.id}`);
-              printInfo(`Name: ${result.name}`);
-              printInfo(`Status: ${statusColor(result.status)}`);
+              printInfo(`Document ID: ${doc.id}`);
+              printInfo(`Name: ${doc.name}`);
+              printInfo(`Status: ${statusColor(doc.status)}`);
 
-              if (result.recipients) {
-                for (const r of result.recipients) {
+              if (doc.recipients) {
+                for (const r of doc.recipients) {
                   printInfo(`  ${r.name || r.email}: ${r.signing_url || '-'}`);
                   if (r.embedded_signing_url) {
                     printInfo(`  Embedded URL: ${r.embedded_signing_url}`);
@@ -192,7 +191,7 @@ export function registerDocumentsCommand(yargs: Argv): Argv {
               const fetcher = (page: number, perPage: number) =>
                 docsApi.listDocuments({
                   page,
-                  per_page: perPage,
+                  limit: perPage,
                   status: argv.status as string | undefined,
                 });
 
@@ -232,7 +231,7 @@ export function registerDocumentsCommand(yargs: Argv): Argv {
             const spin = spinner('Fetching documents...');
             const result = await docsApi.listDocuments({
               page: argv.page,
-              per_page: argv.perPage,
+              limit: argv.perPage,
               status: argv.status as string | undefined,
             });
             spin.succeed('Documents retrieved');

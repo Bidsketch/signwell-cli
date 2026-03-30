@@ -1,5 +1,6 @@
 import { getClient, type ApiClientOptions } from './client.js';
 import type { Template, PaginatedResponse, DocumentFile } from '../types/api.js';
+import { normalizePaginatedResponse } from '../lib/pagination.js';
 
 export interface CreateTemplatePayload {
   name: string;
@@ -38,25 +39,12 @@ export async function getTemplate(id: string, options: ApiClientOptions = {}): P
 }
 
 export async function listTemplates(
-  params: { page?: number; per_page?: number } = {},
+  params: { page?: number; limit?: number } = {},
   options: ApiClientOptions = {},
 ): Promise<PaginatedResponse<Template>> {
   const client = getClient(options);
   const { data } = await client.get('/document_templates', { params });
-
-  const templates = data.templates || data.document_templates || data.data || data;
-  const total = data.total_count || data.total || (Array.isArray(templates) ? templates.length : 0);
-  const page = data.current_page || params.page || 1;
-  const perPage = params.per_page || 20;
-  const totalPages = data.total_pages || Math.ceil(total / perPage) || 1;
-
-  return {
-    data: Array.isArray(templates) ? templates : [],
-    total,
-    page,
-    per_page: perPage,
-    total_pages: totalPages,
-  };
+  return normalizePaginatedResponse<Template>(data, ['templates', 'document_templates'], params);
 }
 
 export async function updateTemplate(

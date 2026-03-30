@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import { getClient, type ApiClientOptions } from './client.js';
 import type { BulkSend, Document, PaginatedResponse } from '../types/api.js';
 import { FileError } from '../lib/errors.js';
+import { normalizePaginatedResponse } from '../lib/pagination.js';
 
 export async function createBulkSend(
   payload: {
@@ -38,48 +39,22 @@ export async function getBulkSend(id: string, options: ApiClientOptions = {}): P
 }
 
 export async function listBulkSends(
-  params: { page?: number; per_page?: number } = {},
+  params: { page?: number; limit?: number } = {},
   options: ApiClientOptions = {},
 ): Promise<PaginatedResponse<BulkSend>> {
   const client = getClient(options);
   const { data } = await client.get('/bulk_sends', { params });
-
-  const bulkSends = data.bulk_sends || data.data || data;
-  const total = data.total_count || data.total || (Array.isArray(bulkSends) ? bulkSends.length : 0);
-  const page = data.current_page || params.page || 1;
-  const perPage = params.per_page || 20;
-  const totalPages = data.total_pages || Math.ceil(total / perPage) || 1;
-
-  return {
-    data: Array.isArray(bulkSends) ? bulkSends : [],
-    total,
-    page,
-    per_page: perPage,
-    total_pages: totalPages,
-  };
+  return normalizePaginatedResponse<BulkSend>(data, ['bulk_sends'], params);
 }
 
 export async function listBulkSendDocuments(
   id: string,
-  params: { page?: number; per_page?: number } = {},
+  params: { page?: number; limit?: number } = {},
   options: ApiClientOptions = {},
 ): Promise<PaginatedResponse<Document>> {
   const client = getClient(options);
   const { data } = await client.get(`/bulk_sends/${id}/documents`, { params });
-
-  const documents = data.documents || data.data || data;
-  const total = data.total_count || data.total || (Array.isArray(documents) ? documents.length : 0);
-  const page = data.current_page || params.page || 1;
-  const perPage = params.per_page || 20;
-  const totalPages = data.total_pages || Math.ceil(total / perPage) || 1;
-
-  return {
-    data: Array.isArray(documents) ? documents : [],
-    total,
-    page,
-    per_page: perPage,
-    total_pages: totalPages,
-  };
+  return normalizePaginatedResponse<Document>(data, ['documents'], params);
 }
 
 export async function getCsvTemplate(
