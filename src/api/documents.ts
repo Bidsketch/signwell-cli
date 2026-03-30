@@ -1,5 +1,6 @@
 import { getClient, type ApiClientOptions } from './client.js';
 import type { Document, DocumentFile, PaginatedResponse } from '../types/api.js';
+import { normalizePaginatedResponse } from '../lib/pagination.js';
 
 export interface CreateDocumentPayload {
   name?: string;
@@ -8,7 +9,8 @@ export interface CreateDocumentPayload {
   draft?: boolean;
   text_tags?: boolean;
   redirect_url?: string;
-  signing_order?: boolean;
+  apply_signing_order?: boolean;
+  embedded_signing?: boolean;
   test_mode?: boolean;
   expires_in?: number;
   reminders?: number[];
@@ -17,7 +19,7 @@ export interface CreateDocumentPayload {
     id?: string;
     email: string;
     name?: string;
-    embedded_signing?: boolean;
+    signing_order?: number;
   }>;
 }
 
@@ -44,26 +46,12 @@ export async function getDocument(id: string, options: ApiClientOptions = {}): P
 }
 
 export async function listDocuments(
-  params: { page?: number; per_page?: number; status?: string } = {},
+  params: { page?: number; limit?: number; status?: string } = {},
   options: ApiClientOptions = {},
 ): Promise<PaginatedResponse<Document>> {
   const client = getClient(options);
   const { data } = await client.get('/documents', { params });
-
-  // Normalize the response into our PaginatedResponse shape
-  const documents = data.documents || data.data || data;
-  const total = data.total_count || data.total || (Array.isArray(documents) ? documents.length : 0);
-  const page = data.current_page || params.page || 1;
-  const perPage = params.per_page || 20;
-  const totalPages = data.total_pages || Math.ceil(total / perPage) || 1;
-
-  return {
-    data: Array.isArray(documents) ? documents : [],
-    total,
-    page,
-    per_page: perPage,
-    total_pages: totalPages,
-  };
+  return normalizePaginatedResponse<Document>(data, ['documents'], params);
 }
 
 export async function sendDocument(id: string, options: ApiClientOptions = {}): Promise<Document> {
@@ -112,12 +100,14 @@ export async function createDocumentFromTemplate(
       placeholder_name?: string;
       email: string;
       name?: string;
-      embedded_signing?: boolean;
+      signing_order?: number;
     }>;
-    fields?: Array<{ name: string; value: string }>;
+    template_fields?: Array<{ api_id: string; value: string }>;
     subject?: string;
     message?: string;
     draft?: boolean;
+    embedded_signing?: boolean;
+    apply_signing_order?: boolean;
     test_mode?: boolean;
   },
   options: ApiClientOptions = {},

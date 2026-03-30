@@ -43,19 +43,19 @@ sw auth login --api-key <KEY> --test-mode --json
 ### Documents
 
 ```bash
-# Create and send a document
+# Create and send a document (sent on creation by default)
 sw documents create \
   --file <path-to-file> \
   --recipient "email@example.com:Recipient Name" \
   --name "Document Name" \
-  --send --json
+  --json
 
 # Multiple files and recipients
 sw documents create \
   --file contract.pdf --file appendix.pdf \
   --recipient "alice@co.com:Alice" --recipient "bob@co.com:Bob" \
   --subject "Please sign" --message "Attached for signature." \
-  --send --json
+  --json
 
 # File from URL
 sw documents create --file-url "https://example.com/doc.pdf" \
@@ -107,12 +107,18 @@ sw documents recipients update <document-id> \
 ### Templates
 
 ```bash
-# Create a template
+# Create a template (at least one placeholder required)
 sw templates create \
   --file nda.pdf \
   --name "Standard NDA" \
-  --placeholder "Client:client@example.com:Client Rep" \
+  --placeholder "Client:client@example.com" \
   --text-tags --json
+
+# Create a template from a URL
+sw templates create \
+  --file-url "https://example.com/nda.pdf" \
+  --name "Standard NDA" \
+  --placeholder "Client" --json
 
 # Get template details
 sw templates get <template-id> --json
@@ -127,11 +133,11 @@ sw templates update <template-id> --name "Updated NDA" --json
 # Delete a template
 sw templates delete <template-id> --confirm --json
 
-# Create document from template and send
+# Create document from template (sent on creation by default)
 sw templates use <template-id> \
   --recipient "Signer:alice@co.com:Alice Smith" \
   --field "company=Acme Inc" --field "date=2024-01-15" \
-  --send --json
+  --json
 
 # Simple recipient (no placeholder role)
 sw templates use <template-id> \
@@ -253,12 +259,12 @@ sw schema bulk-send.create
 
 ### Send a document for signing
 1. `sw auth status --json` — verify authenticated
-2. `sw documents create --file doc.pdf --recipient "email:Name" --name "Doc Name" --send --json`
+2. `sw documents create --file doc.pdf --recipient "email:Name" --name "Doc Name" --json` — documents are sent on creation by default
 
 ### Use a template
 1. `sw templates list --json` — find template ID
 2. `sw templates get <id> --json` — check placeholder roles and fields
-3. `sw templates use <id> --recipient "Role:email:Name" --field "key=value" --send --json`
+3. `sw templates use <id> --recipient "Role:email:Name" --field "key=value" --json` — sent on creation by default
 
 ### Bulk send
 1. `sw bulk-send csv-template --template <id> -o batch.csv --json` — get CSV template

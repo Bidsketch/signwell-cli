@@ -12,11 +12,11 @@ const FileInput = z.object({
 const RecipientInput = z.object({
   email: z.string().email(),
   name: z.string().optional(),
-  embedded_signing: z.boolean().optional(),
+  signing_order: z.number().optional(),
 });
 
 const FieldInput = z.object({
-  name: z.string(),
+  api_id: z.string(),
   value: z.string(),
 });
 
@@ -30,7 +30,8 @@ const schemas: Record<string, { description: string; input: z.ZodType; output: z
       draft: z.boolean().optional(),
       text_tags: z.boolean().optional(),
       redirect_url: z.string().url().optional(),
-      signing_order: z.boolean().optional(),
+      apply_signing_order: z.boolean().optional(),
+      embedded_signing: z.boolean().optional(),
       expires_in: z.number().optional(),
       reminders: z.array(z.number()).optional(),
       files: z.array(FileInput).min(1),
@@ -78,7 +79,7 @@ const schemas: Record<string, { description: string; input: z.ZodType; output: z
     description: 'List documents with pagination',
     input: z.object({
       page: z.number().optional(),
-      per_page: z.number().optional(),
+      limit: z.number().optional(),
       status: z.enum(['pending', 'completed', 'cancelled', 'draft']).optional(),
     }),
     output: z.object({
@@ -93,7 +94,7 @@ const schemas: Record<string, { description: string; input: z.ZodType; output: z
         count: z.number(),
         total: z.number(),
         page: z.number(),
-        per_page: z.number(),
+        limit: z.number(),
         total_pages: z.number(),
       }),
     }),
@@ -126,7 +127,7 @@ const schemas: Record<string, { description: string; input: z.ZodType; output: z
     description: 'List templates with pagination',
     input: z.object({
       page: z.number().optional(),
-      per_page: z.number().optional(),
+      limit: z.number().optional(),
     }),
     output: z.object({
       success: z.boolean(),
@@ -143,10 +144,12 @@ const schemas: Record<string, { description: string; input: z.ZodType; output: z
         email: z.string().email(),
         name: z.string().optional(),
       })).min(1),
-      fields: z.array(FieldInput).optional(),
+      template_fields: z.array(FieldInput).optional(),
       subject: z.string().optional(),
       message: z.string().optional(),
       draft: z.boolean().optional(),
+      embedded_signing: z.boolean().optional(),
+      apply_signing_order: z.boolean().optional(),
     }),
     output: z.object({
       success: z.boolean(),

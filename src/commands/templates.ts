@@ -27,7 +27,10 @@ export function registerTemplatesCommand(yargs: Argv): Argv {
         'Create a new template',
         (yy) =>
           yy
-            .option('file', { type: 'string', array: true, demandOption: true, describe: 'Template file(s)' })
+            .option('file', { type: 'string', array: true, describe: 'Local file path(s)' })
+            .option('file-url', { type: 'string', array: true, describe: 'Remote file URL(s)' })
+            .option('file-b64', { type: 'string', describe: 'Path to base64-encoded file' })
+            .option('file-b64-name', { type: 'string', describe: 'Filename for base64 upload' })
             .option('name', { type: 'string', demandOption: true, describe: 'Template name' })
             .option('placeholder', { type: 'string', array: true, describe: 'Placeholder as "Name:email:display_name"' })
             .option('text-tags', { type: 'boolean', describe: 'Enable text tag parsing' })
@@ -42,7 +45,12 @@ export function registerTemplatesCommand(yargs: Argv): Argv {
             });
 
             const spin = spinner('Preparing files...');
-            const files = await resolveFiles(argv.file as string[]);
+            const files = await resolveFiles(
+              argv.file as string[] | undefined,
+              argv.fileUrl as string[] | undefined,
+              argv.fileB64 as string | undefined,
+              argv.fileB64Name as string | undefined,
+            );
 
             spin.text = 'Creating template...';
 
@@ -55,26 +63,17 @@ export function registerTemplatesCommand(yargs: Argv): Argv {
             if (argv.fields) {
               const fieldsContent = fs.readFileSync(argv.fields as string, 'utf-8');
               fields = JSON.parse(fieldsContent);
-            } else if (placeholders && placeholders.length > 0) {
-              // Auto-generate a default signature field per placeholder
-              fields = placeholders.map((p, i) => ({
-                x: 10,
-                y: 10 + (i * 50),
-                page: 1,
-                type: 'signature',
-                required: true,
-                placeholder_id: `placeholder_${i + 1}`,
-                width: 200,
-                height: 40,
-              }));
             }
+
+            const hasFields = fields && fields.length > 0;
 
             const template = await templatesApi.createTemplate({
               name: argv.name as string,
               text_tags: argv.textTags as boolean | undefined,
+              draft: hasFields ? undefined : true,
               files,
               placeholders,
-              fields,
+              fields: hasFields ? fields : undefined,
             });
 
             spin.succeed('Template created');
@@ -150,7 +149,7 @@ export function registerTemplatesCommand(yargs: Argv): Argv {
             if (fetchAll) {
               const spin = spinner('Fetching all templates...');
               const fetcher = (page: number, perPage: number) =>
-                templatesApi.listTemplates({ page, per_page: perPage });
+                templatesApi.listTemplates({ page, limit: perPage });
 
               const items: unknown[] = [];
 
@@ -183,7 +182,7 @@ export function registerTemplatesCommand(yargs: Argv): Argv {
             const spin = spinner('Fetching templates...');
             const result = await templatesApi.listTemplates({
               page: argv.page,
-              per_page: argv.perPage,
+              limit: argv.perPage,
             });
             spin.succeed('Templates retrieved');
 
@@ -334,35 +333,28 @@ export function registerTemplatesCommand(yargs: Argv): Argv {
             });
 
             const fields = (argv.field as string[] | undefined)?.map((spec) => {
-              const [name, ...rest] = spec.split('=');
-              return { name, value: rest.join('=') };
+              const [apiId, ...rest] = spec.split('=');
+              return { api_id: apiId, value: rest.join('=') };
             });
 
             const doc = await docsApi.createDocumentFromTemplate({
               template_ids: [argv.id as string],
               recipients,
-              fields,
+              template_fields: fields,
               subject: argv.subject as string | undefined,
               message: argv.message as string | undefined,
-              draft: argv.send ? true : argv.draft as boolean | undefined,
+              draft: argv.draft as boolean | undefined,
             });
 
-            let result = doc;
-            if (argv.send && !argv.draft) {
-              spin.text = 'Sending document...';
-              result = await docsApi.sendDocument(doc.id);
-              spin.succeed('Document created from template and sent');
-            } else {
-              spin.succeed('Document created from template');
-            }
+            spin.succeed(argv.draft ? 'Draft created from template' : 'Document created from template');
 
             if (isJsonMode()) {
-              printJson(result);
+              printJson(doc);
             } else {
-              printInfo(`Document ID: ${result.id}`);
-              printInfo(`Name: ${result.name}`);
-              if (result.recipients) {
-                for (const r of result.recipients) {
+              printInfo(`Document ID: ${doc.id}`);
+              printInfo(`Name: ${doc.name}`);
+              if (doc.recipients) {
+                for (const r of doc.recipients) {
                   printInfo(`  ${r.name || r.email}: ${r.signing_url || '-'}`);
                 }
               }

@@ -1,5 +1,34 @@
 import type { PaginatedResponse } from '../types/api.js';
 
+/**
+ * Normalizes varying API list response shapes into a consistent PaginatedResponse.
+ * The SignWell API uses different field names across endpoints.
+ */
+export function normalizePaginatedResponse<T>(
+  data: Record<string, unknown>,
+  itemsKeys: string[],
+  params: { limit?: number; page?: number } = {},
+): PaginatedResponse<T> {
+  let items: unknown = undefined;
+  for (const key of itemsKeys) {
+    if (data[key]) { items = data[key]; break; }
+  }
+  if (!items) items = data.data || data;
+
+  const total = (data.total_entries ?? data.total_count ?? data.total ?? (Array.isArray(items) ? items.length : 0)) as number;
+  const page = (data.current_page ?? data.page ?? params.page ?? 1) as number;
+  const limit = params.limit || 20;
+  const totalPages = ((data.total_pages as number | undefined) ?? Math.ceil(total / limit)) || 1;
+
+  return {
+    data: Array.isArray(items) ? items : [],
+    total,
+    page,
+    per_page: limit,
+    total_pages: totalPages,
+  };
+}
+
 export interface PaginateOptions {
   perPage?: number;
   onPage?: (current: number, total: number) => void;
