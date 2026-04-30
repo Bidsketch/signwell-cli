@@ -17,6 +17,7 @@ import {
   isJsonMode,
   handleOutputError,
 } from '../lib/output.js';
+import { CliError, UsageError } from '../lib/errors.js';
 
 export function registerProfileCommand(yargs: Argv): Argv {
   return yargs.command('profile', 'Manage configuration profiles', (y) =>
@@ -90,8 +91,7 @@ export function registerProfileCommand(yargs: Argv): Argv {
             }
 
             if (!apiKey) {
-              printError('API key is required');
-              process.exit(2);
+              throw new UsageError('API key is required');
             }
 
             saveProfile(argv.name as string, {
@@ -124,8 +124,7 @@ export function registerProfileCommand(yargs: Argv): Argv {
                 printSuccess(`Switched to profile: ${argv.name}`);
               }
             } else {
-              printError(`Profile not found: ${argv.name}`);
-              process.exit(1);
+              throw new CliError(`Profile not found: ${argv.name}`);
             }
           } catch (err) {
             handleOutputError(err);
@@ -172,8 +171,7 @@ export function registerProfileCommand(yargs: Argv): Argv {
                 printSuccess(`Profile '${name}' removed`);
               }
             } else {
-              printError(`Profile not found: ${name}`);
-              process.exit(1);
+              throw new CliError(`Profile not found: ${name}`);
             }
           } catch (err) {
             handleOutputError(err);
@@ -192,8 +190,7 @@ export function registerProfileCommand(yargs: Argv): Argv {
             const profile = config.profiles[name];
 
             if (!profile) {
-              printError(`Profile not found: ${name}`);
-              process.exit(1);
+              throw new CliError(`Profile not found: ${name}`);
             }
 
             if (isJsonMode()) {

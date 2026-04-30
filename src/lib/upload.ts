@@ -8,6 +8,10 @@ const SUPPORTED_MIMES = new Set([
   'application/pdf',
   'application/msword',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
   'image/png',
   'image/jpeg',
 ]);
@@ -16,7 +20,7 @@ export function validateFileType(filePath: string): void {
   const mime = lookup(filePath);
   if (mime && !SUPPORTED_MIMES.has(mime)) {
     throw new FileError(
-      `Unsupported file type: ${mime} for ${filePath}. Supported: PDF, DOCX, PNG, JPG`,
+      `Unsupported file type: ${mime} for ${filePath}. Supported: PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX, PNG, JPG`,
     );
   }
 }
@@ -38,6 +42,9 @@ export async function resolveFile(input: string): Promise<DocumentFile> {
   const stat = fs.statSync(input);
   if (!stat.isFile()) {
     throw new FileError(`Not a file: ${input}`);
+  }
+  if (stat.size === 0) {
+    throw new FileError(`File is empty: ${input}`);
   }
 
   validateFileType(input);
@@ -64,6 +71,9 @@ export async function resolveFileBase64(filePath: string, fileName: string): Pro
   }
 
   const content = fs.readFileSync(filePath, 'utf-8').trim();
+  if (!content) {
+    throw new FileError(`Base64 file is empty: ${filePath}`);
+  }
 
   return {
     name: fileName,

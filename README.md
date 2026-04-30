@@ -58,12 +58,11 @@ Requires **Node.js >= 18**.
 # Authenticate
 sw auth login --api-key YOUR_API_KEY
 
-# Create and send a document
+# Create a draft from an uploaded document
 sw documents create \
   --file contract.pdf \
   --recipient "alice@example.com:Alice Smith" \
-  --name "Service Agreement" \
-  --send
+  --name "Service Agreement"
 
 # List documents
 sw documents list
@@ -85,12 +84,11 @@ sw templates use tmpl_xyz \
 ### Freelancer: Send a contract and get it signed
 
 ```bash
-# Send a contract to a client
+# Create a contract draft and add fields in SignWell
 sw documents create \
   --file proposal.pdf \
   --recipient "client@company.com:Jane Lee" \
-  --name "Web Design Proposal" \
-  --send
+  --name "Web Design Proposal"
 
 # Check if it's been signed yet
 sw documents list --status pending
@@ -166,11 +164,11 @@ sw documents create \
   --file generated-invoice.pdf \
   --recipient "billing@client.com:Billing Dept" \
   --name "Invoice #1042" \
-  --send --quiet
+  --quiet
 
 # Check exit code
 if [ $? -eq 0 ]; then
-  echo "Invoice sent"
+  echo "Invoice draft created"
 fi
 ```
 
@@ -185,7 +183,7 @@ sw documents create \
   --file draft.pdf \
   --recipient "test@example.com:Test User" \
   --name "Test Doc" \
-  --send --test-mode
+  --test-mode
 
 # Everything works the same, but no emails are delivered
 sw documents list
@@ -596,14 +594,21 @@ sw documents create \
   --recipient "alice@example.com:Alice Smith" \
   --name "Service Agreement"
 
-# Multiple files, multiple recipients, send immediately
+# Multiple files and recipients as a draft
 sw documents create \
   --file contract.pdf \
   --file appendix.pdf \
   --recipient "alice@example.com:Alice Smith" \
   --recipient "bob@example.com:Bob Jones" \
   --subject "Please sign" \
-  --message "Attached for your signature." \
+  --message "Attached for your signature."
+
+# Send immediately when the file contains SignWell text tags
+sw documents create \
+  --file contract.pdf \
+  --recipient "alice@example.com:Alice Smith" \
+  --name "Tagged Service Agreement" \
+  --text-tags \
   --send
 
 # File from URL
@@ -621,7 +626,6 @@ sw documents create \
 sw documents create \
   --file contract.pdf \
   --recipient "alice@example.com:Alice" \
-  --draft \
   --text-tags \
   --signing-order \
   --expiration-days 30 \
@@ -640,9 +644,9 @@ sw documents create \
 | `--recipient <spec>` | `string[]` | **yes** | `"email:name"` or `"email:name:embedded"` |
 | `--subject` | `string` | | Email subject line |
 | `--message` | `string` | | Email message body |
-| `--draft` | `boolean` | | Create as draft (default: `false`) |
-| `--send` | `boolean` | | Send immediately after creation |
-| `--text-tags` | `boolean` | | Enable text tag parsing |
+| `--draft` | `boolean` | | Create as draft (default behavior) |
+| `--send` | `boolean` | | Send after creation; requires `--text-tags` for file uploads |
+| `--text-tags` | `boolean` | | Enable text tag parsing before sending |
 | `--redirect-url` | `string` | | Redirect URL after signing |
 | `--signing-order` | `boolean` | | Enforce sequential signing order |
 | `--expiration-days` | `number` | | Days until document expires |
@@ -1578,6 +1582,7 @@ Authentication: `X-Api-Token` header.
 | `429` | `RATE_LIMITED` | Retry in a few seconds or reduce request frequency |
 | `500` | `SERVER_ERROR` | This is a SignWell server error. Try again later |
 | `503` | `SERVICE_UNAVAILABLE` | SignWell API is temporarily unavailable. Retrying automatically... |
+| network | `NETWORK_ERROR` | Check `SIGNWELL_API_BASE_URL` and your network connection |
 | other | `API_ERROR` | Check API docs or contact support |
 
 ### Exit Codes

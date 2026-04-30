@@ -9,7 +9,22 @@ import { registerBulkSendCommand } from './commands/bulk-send.js';
 import { registerWebhooksCommand } from './commands/webhooks.js';
 import { registerSchemaCommand } from './commands/schema.js';
 import { registerSkillsCommand } from './commands/skills.js';
-import { setOutputMode } from './lib/output.js';
+import { printError, printErrorJson, setOutputMode } from './lib/output.js';
+
+function hasRawFlag(args: string[], flag: string): boolean {
+  return args.some((arg) => arg === `--${flag}` || arg.startsWith(`--${flag}=`));
+}
+
+function configureOutputFromRawArgs(): { json: boolean; quiet: boolean; noColor: boolean } {
+  const args = hideBin(process.argv);
+  const output = {
+    json: hasRawFlag(args, 'json'),
+    quiet: hasRawFlag(args, 'quiet'),
+    noColor: args.includes('--no-color') || process.env.NO_COLOR !== undefined,
+  };
+  setOutputMode(output);
+  return output;
+}
 
 const cli = yargs(hideBin(process.argv))
   .scriptName('sw')
@@ -53,13 +68,39 @@ const cli = yargs(hideBin(process.argv))
     setOutputMode({
       json: argv.json,
       quiet: argv.quiet,
-      noColor: argv.noColor,
+      noColor: process.env.NO_COLOR !== undefined ||
+        (argv as Record<string, unknown>).color === false ||
+        argv.noColor === true,
     });
   })
   .version()
   .help()
   .alias('h', 'help')
   .strict()
+  .strictCommands()
+  .strictOptions()
+  .fail((message, err, y) => {
+    const output = configureOutputFromRawArgs();
+    const errorMessage = err?.message || message || 'Invalid command';
+    const hint = 'Run `sw --help` for available commands and usage.';
+
+    if (output.json) {
+      printErrorJson({
+        code: 'USAGE_ERROR',
+        message: errorMessage,
+        hint,
+        http_status: 0,
+      });
+    } else {
+      if (!output.quiet) {
+        y.showHelp('error');
+        process.stderr.write('\n');
+      }
+      printError(errorMessage, hint);
+    }
+
+    process.exit(2);
+  })
   .demandCommand(1, 'Please specify a command. Run `sw --help` for available commands.');
 
 // Register all command groups

@@ -33,27 +33,81 @@ const ERROR_MAP: Record<number, { code: string; hint: string }> = {
 };
 
 export function mapAxiosError(err: AxiosError): ApiError {
-  const status = err.response?.status || 500;
+  if (!err.response) {
+    return {
+      code: 'NETWORK_ERROR',
+      message: getNetworkErrorMessage(err),
+      hint: 'Check SIGNWELL_API_BASE_URL and your network connection',
+      http_status: 0,
+    };
+  }
+
+  const status = err.response.status;
   const data = err.response?.data as Record<string, unknown> | undefined;
   const mapping = ERROR_MAP[status] || { code: 'UNKNOWN_ERROR', hint: 'An unexpected error occurred' };
+  let hint = mapping.hint;
 
-  let message = mapping.code === 'VALIDATION_ERROR' && data
+  const message = mapping.code === 'VALIDATION_ERROR' && data
     ? extractValidationMessage(data)
-    : (data?.message as string) || (data?.error as string) || err.message;
+    : getApiErrorMessage(data, err.message, mapping.code);
 
   if (status === 429) {
     const retryAfter = err.response?.headers?.['retry-after'];
     if (retryAfter) {
-      mapping.hint = `Retry in ${retryAfter} seconds`;
+      hint = `Retry in ${retryAfter} seconds`;
     }
   }
 
   return {
     code: mapping.code,
     message,
-    hint: mapping.hint,
+    hint,
     http_status: status,
   };
+}
+
+function getApiErrorMessage(
+  data: Record<string, unknown> | undefined,
+  fallback: string,
+  code: string,
+): string {
+  const message = typeof data?.message === 'string' ? data.message.trim() : '';
+  const error = typeof data?.error === 'string' ? data.error.trim() : '';
+  const fallbackMessage = fallback.trim();
+  return message || error || fallbackMessage || code;
+}
+
+function getNetworkErrorMessage(err: AxiosError): string {
+  const target = getRequestTarget(err);
+  const code = err.code || '';
+  const message = err.message.trim();
+
+  if (code === 'ECONNREFUSED') {
+    return `Connection refused: could not connect to ${target}`;
+  }
+  if (code === 'ENOTFOUND') {
+    return `Could not resolve SignWell API host for ${target}`;
+  }
+  if (code === 'ECONNABORTED' || code === 'ETIMEDOUT') {
+    return `Request timed out connecting to ${target}`;
+  }
+
+  return message || `Could not connect to ${target}`;
+}
+
+function getRequestTarget(err: AxiosError): string {
+  const baseURL = err.config?.baseURL;
+  const url = err.config?.url;
+
+  if (baseURL && url) {
+    try {
+      return new URL(url, baseURL).toString();
+    } catch {
+      return `${baseURL}${url}`;
+    }
+  }
+
+  return baseURL || url || 'the SignWell API server';
 }
 
 function flattenErrors(obj: unknown, prefix = ''): string[] {
@@ -95,22 +149,22 @@ export class CliError extends Error {
 }
 
 export class FileError extends CliError {
-  constructor(message: string) {
-    super(message, 5);
+  constructor(message: string, hint?: string) {
+    super(message, 5, hint);
     this.name = 'FileError';
   }
 }
 
 export class CsvError extends CliError {
-  constructor(message: string) {
-    super(message, 6);
+  constructor(message: string, hint?: string) {
+    super(message, 6, hint);
     this.name = 'CsvError';
   }
 }
 
 export class UsageError extends CliError {
-  constructor(message: string) {
-    super(message, 2);
+  constructor(message: string, hint?: string) {
+    super(message, 2, hint);
     this.name = 'UsageError';
   }
 }

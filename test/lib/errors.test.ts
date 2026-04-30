@@ -59,6 +59,17 @@ describe('errors', () => {
       } as AxiosError;
     }
 
+    function makeNetworkError(code: string, message = ''): AxiosError {
+      return {
+        code,
+        message,
+        isAxiosError: true,
+        config: { baseURL: 'http://localhost:1', url: '/documents' } as any,
+        name: 'AxiosError',
+        toJSON: () => ({}),
+      } as AxiosError;
+    }
+
     it('maps 401 to UNAUTHORIZED', () => {
       const err = mapAxiosError(makeAxiosError(401));
       expect(err.code).toBe('UNAUTHORIZED');
@@ -86,6 +97,14 @@ describe('errors', () => {
     it('maps 503 to SERVICE_UNAVAILABLE', () => {
       const err = mapAxiosError(makeAxiosError(503));
       expect(err.code).toBe('SERVICE_UNAVAILABLE');
+    });
+
+    it('maps network errors with a useful message', () => {
+      const err = mapAxiosError(makeNetworkError('ECONNREFUSED'));
+      expect(err.code).toBe('NETWORK_ERROR');
+      expect(err.http_status).toBe(0);
+      expect(err.message).toContain('Connection refused');
+      expect(err.message).toContain('http://localhost:1/documents');
     });
   });
 
