@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { readCsv, readCsvBuffer } from '../../src/lib/csv.js';
+import { readCsv, readCsvBuffer, prepareCsvForUpload } from '../../src/lib/csv.js';
 
 const tmpDir = path.join(os.tmpdir(), 'signwell-csv-test-' + Date.now());
 
@@ -51,5 +51,15 @@ describe('csv', () => {
 
   it('readCsvBuffer throws for invalid content', () => {
     expect(() => readCsvBuffer('"unclosed')).toThrow('Failed to parse CSV');
+  });
+
+  it('prepareCsvForUpload keeps the header and limits data rows', () => {
+    const result = prepareCsvForUpload('name,email\nAlice,alice@example.com\nBob,bob@example.com', 1);
+    expect(result.rowCount).toBe(1);
+    expect(result.content).toBe('name,email\nAlice,alice@example.com');
+  });
+
+  it('prepareCsvForUpload rejects invalid limits', () => {
+    expect(() => prepareCsvForUpload('name,email\nAlice,alice@example.com', 0)).toThrow('--limit');
   });
 });

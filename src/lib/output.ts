@@ -7,13 +7,23 @@ import { mapAxiosError, getExitCode } from './errors.js';
 
 let jsonMode = false;
 let quietMode = false;
+let colorDisabled = process.env.NO_COLOR !== undefined;
+const defaultChalkLevel = chalk.level;
 
 export function setOutputMode(options: { json?: boolean; quiet?: boolean; noColor?: boolean }): void {
-  jsonMode = !!options.json;
-  quietMode = !!options.quiet;
-  if (options.noColor) {
+  if (options.json !== undefined) {
+    jsonMode = !!options.json;
+  }
+  if (options.quiet !== undefined) {
+    quietMode = !!options.quiet;
+  }
+  if (options.noColor !== undefined) {
+    colorDisabled = !!options.noColor;
+  }
+  if (colorDisabled) {
     process.env.NO_COLOR = '1';
   }
+  chalk.level = colorDisabled ? 0 : defaultChalkLevel;
 }
 
 export function isJsonMode(): boolean {

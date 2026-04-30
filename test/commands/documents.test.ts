@@ -45,6 +45,22 @@ describe('documents API', () => {
     expect(result.total).toBe(2);
   });
 
+  it('retries once after a 429 rate limit response', async () => {
+    resetClient();
+    createApiClient({ apiKey: 'test-api-key', baseUrl: BASE_URL, testMode: true, retries: 1 });
+
+    nock(BASE_URL)
+      .get('/documents')
+      .query({ page: 1, per_page: 20 })
+      .reply(429, { error: 'rate limited' })
+      .get('/documents')
+      .query({ page: 1, per_page: 20 })
+      .reply(200, documentsListFixture);
+
+    const result = await listDocuments({ page: 1, per_page: 20 });
+    expect(result.data).toHaveLength(2);
+  });
+
   it('creates a document', async () => {
     nock(BASE_URL)
       .post('/documents')

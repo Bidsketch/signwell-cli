@@ -8,7 +8,6 @@ import {
   printJson,
   printNdjson,
   printSuccess,
-  printError,
   printInfo,
   spinner,
   createTable,
@@ -85,6 +84,7 @@ export function registerBulkSendCommand(yargs: Argv): Argv {
               template_ids: argv.template as string[],
               name: argv.name as string | undefined,
               csv_file: argv.csv as string,
+              limit: argv.limit as number | undefined,
             });
             spin.succeed('Bulk send created');
 

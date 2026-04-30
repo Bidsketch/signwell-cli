@@ -19,6 +19,7 @@ import {
   isJsonMode,
   handleOutputError,
 } from '../lib/output.js';
+import { CliError, UsageError } from '../lib/errors.js';
 
 export function registerAuthCommand(yargs: Argv): Argv {
   return yargs.command('auth', 'Manage authentication', (y) =>
@@ -50,8 +51,7 @@ export function registerAuthCommand(yargs: Argv): Argv {
             }
 
             if (!apiKey) {
-              printError('API key is required');
-              process.exit(2);
+              throw new UsageError('API key is required');
             }
 
             const spin = spinner('Validating API key...');
@@ -102,8 +102,7 @@ export function registerAuthCommand(yargs: Argv): Argv {
                 printSuccess(`Removed profile: ${profileName}`);
               }
             } else {
-              printError(`Profile not found: ${profileName}`);
-              process.exit(1);
+              throw new CliError(`Profile not found: ${profileName}`);
             }
           } catch (err) {
             handleOutputError(err);

@@ -31,6 +31,22 @@ describe('upload', () => {
     expect(result.file_url).toBeUndefined();
   });
 
+  it('accepts PPTX and XLSX files', async () => {
+    const pptxPath = path.join(tmpDir, 'slides.pptx');
+    const xlsxPath = path.join(tmpDir, 'sheet.xlsx');
+    fs.writeFileSync(pptxPath, 'fake pptx content');
+    fs.writeFileSync(xlsxPath, 'fake xlsx content');
+
+    await expect(resolveFile(pptxPath)).resolves.toMatchObject({ name: 'slides.pptx' });
+    await expect(resolveFile(xlsxPath)).resolves.toMatchObject({ name: 'sheet.xlsx' });
+  });
+
+  it('throws for empty local files', async () => {
+    const filePath = path.join(tmpDir, 'empty.pdf');
+    fs.writeFileSync(filePath, '');
+    await expect(resolveFile(filePath)).rejects.toThrow('File is empty');
+  });
+
   it('throws for non-existent file', async () => {
     await expect(resolveFile('/nonexistent/file.pdf')).rejects.toThrow('File not found');
   });

@@ -3,12 +3,14 @@ import { getClient, type ApiClientOptions } from './client.js';
 import type { BulkSend, Document, PaginatedResponse } from '../types/api.js';
 import { FileError } from '../lib/errors.js';
 import { normalizePaginatedResponse } from '../lib/pagination.js';
+import { readCsvForUpload } from '../lib/csv.js';
 
 export async function createBulkSend(
   payload: {
     template_ids: string[];
     name?: string;
     csv_file: string; // path to CSV file
+    limit?: number;
     test_mode?: boolean;
   },
   options: ApiClientOptions = {},
@@ -19,9 +21,8 @@ export async function createBulkSend(
     throw new FileError(`CSV file not found: ${payload.csv_file}`);
   }
 
-  const csvContent = fs.readFileSync(payload.csv_file, 'utf-8');
-
-  const csvBase64 = Buffer.from(csvContent).toString('base64');
+  const csv = readCsvForUpload(payload.csv_file, payload.limit);
+  const csvBase64 = Buffer.from(csv.content).toString('base64');
 
   const { data } = await client.post<BulkSend>('/bulk_sends', {
     template_ids: payload.template_ids,
@@ -79,9 +80,8 @@ export async function validateCsv(
     throw new FileError(`CSV file not found: ${payload.csv_file}`);
   }
 
-  const csvContent = fs.readFileSync(payload.csv_file, 'utf-8');
-
-  const csvBase64 = Buffer.from(csvContent).toString('base64');
+  const csv = readCsvForUpload(payload.csv_file);
+  const csvBase64 = Buffer.from(csv.content).toString('base64');
 
   const { data } = await client.post('/bulk_sends/validate_csv', {
     template_ids: payload.template_ids,

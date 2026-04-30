@@ -43,10 +43,11 @@ export function createApiClient(options: ApiClientOptions = {}): AxiosInstance {
   // Retry configuration
   axiosRetry(client, {
     retries: options.retries ?? 3,
+    shouldResetTimeout: true,
     retryDelay: axiosRetry.exponentialDelay,
     retryCondition: (error: AxiosError) => {
       const status = error.response?.status;
-      return status === 429 || status === 503 || !error.response;
+      return status === 429 || status === 503 || axiosRetry.isNetworkError(error);
     },
   });
 

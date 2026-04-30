@@ -4,12 +4,12 @@ import { createApiClient } from '../api/client.js';
 import * as docsApi from '../api/documents.js';
 import { resolveFiles } from '../lib/upload.js';
 import { paginate } from '../lib/pagination.js';
+import { CliError, UsageError } from '../lib/errors.js';
 import {
   setOutputMode,
   printJson,
   printNdjson,
   printSuccess,
-  printError,
   printInfo,
   spinner,
   createTable,
@@ -43,9 +43,9 @@ export function registerDocumentsCommand(yargs: Argv): Argv {
             .option('recipient', { type: 'string', array: true, demandOption: true, describe: 'Recipient(s) as "email:name" or "email:name:embedded"' })
             .option('subject', { type: 'string', describe: 'Email subject line' })
             .option('message', { type: 'string', describe: 'Email message body' })
-            .option('draft', { type: 'boolean', describe: 'Create as draft', default: false })
-            .option('send', { type: 'boolean', describe: 'Send after creation' })
-            .option('text-tags', { type: 'boolean', describe: 'Enable text tag parsing' })
+            .option('draft', { type: 'boolean', describe: 'Create as draft (default)' })
+            .option('send', { type: 'boolean', describe: 'Send after creation; requires --text-tags for file uploads' })
+            .option('text-tags', { type: 'boolean', describe: 'Enable text tag parsing before sending' })
             .option('redirect-url', { type: 'string', describe: 'Redirect URL after signing' })
             .option('signing-order', { type: 'boolean', describe: 'Enforce sequential signing order' })
             .option('expiration-days', { type: 'number', describe: 'Days until expiration' })
@@ -53,6 +53,19 @@ export function registerDocumentsCommand(yargs: Argv): Argv {
         async (argv) => {
           setOutputMode({ json: argv.json as boolean, quiet: argv.quiet as boolean });
           try {
+            const shouldSend = !!argv.send;
+            const useTextTags = !!argv.textTags;
+
+            if (shouldSend && argv.draft) {
+              throw new UsageError('Cannot use --send and --draft together');
+            }
+            if (shouldSend && !useTextTags) {
+              throw new UsageError(
+                'Cannot send a file-based document without fields. Omit --send to create a draft, or add --text-tags when the file contains SignWell text tags.',
+                'For most uploaded contracts, create a draft first and add fields in SignWell.',
+              );
+            }
+
             createApiClient({
               profile: argv.profile as string,
               testMode: argv.testMode as boolean,
@@ -87,8 +100,8 @@ export function registerDocumentsCommand(yargs: Argv): Argv {
               name: docName,
               subject: argv.subject as string | undefined,
               message: argv.message as string | undefined,
-              draft: argv.draft as boolean,
-              text_tags: argv.textTags as boolean | undefined,
+              draft: true,
+              text_tags: useTextTags ? true : undefined,
               redirect_url: argv.redirectUrl as string | undefined,
               apply_signing_order: argv.signingOrder as boolean | undefined,
               embedded_signing: hasEmbedded ? true : undefined,
@@ -98,17 +111,22 @@ export function registerDocumentsCommand(yargs: Argv): Argv {
               recipients: mappedRecipients,
             });
 
-            spin.succeed(argv.draft ? 'Draft created' : 'Document created');
+            let outputDoc = doc;
+            if (shouldSend) {
+              spin.text = 'Sending document...';
+              outputDoc = await docsApi.sendDocument(doc.id);
+            }
+            spin.succeed(shouldSend ? 'Document sent' : 'Draft created');
 
             if (isJsonMode()) {
-              printJson(doc);
+              printJson(outputDoc);
             } else {
-              printInfo(`Document ID: ${doc.id}`);
-              printInfo(`Name: ${doc.name}`);
-              printInfo(`Status: ${statusColor(doc.status)}`);
+              printInfo(`Document ID: ${outputDoc.id}`);
+              printInfo(`Name: ${outputDoc.name}`);
+              printInfo(`Status: ${statusColor(outputDoc.status)}`);
 
-              if (doc.recipients) {
-                for (const r of doc.recipients) {
+              if (outputDoc.recipients) {
+                for (const r of outputDoc.recipients) {
                   printInfo(`  ${r.name || r.email}: ${r.signing_url || '-'}`);
                   if (r.embedded_signing_url) {
                     printInfo(`  Embedded URL: ${r.embedded_signing_url}`);
@@ -348,9 +366,14 @@ export function registerDocumentsCommand(yargs: Argv): Argv {
             const doc = await docsApi.getDocument(argv.id as string);
 
             if (doc.status.toLowerCase() !== 'completed') {
-              spin.fail('Document not yet completed');
-              printError(`Document status is '${doc.status}'. Only completed documents can be downloaded.`);
-              process.exit(1);
+              if (!isJsonMode()) {
+                spin.fail('Document not yet completed');
+              }
+              throw new CliError(
+                `Document status is '${doc.status}'. Only completed documents can be downloaded.`,
+                1,
+                'Check the document later or use `sw documents get <id>` for the current status.',
+              );
             }
 
             const buffer = await docsApi.downloadDocument(argv.id as string);

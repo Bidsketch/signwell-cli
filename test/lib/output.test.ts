@@ -4,6 +4,7 @@ import {
   isJsonMode,
   isQuietMode,
   formatDate,
+  statusColor,
 } from '../../src/lib/output.js';
 
 describe('output', () => {
@@ -32,5 +33,11 @@ describe('output', () => {
   it('formatDate handles invalid date gracefully', () => {
     const result = formatDate('not-a-date');
     expect(typeof result).toBe('string');
+  });
+
+  it('setOutputMode disables ANSI color output', () => {
+    setOutputMode({ noColor: true });
+    expect(statusColor('completed')).not.toContain('\u001b[');
+    setOutputMode({ noColor: false });
   });
 });
