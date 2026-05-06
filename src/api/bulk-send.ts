@@ -1,9 +1,18 @@
 import fs from 'node:fs';
+import axios from 'axios';
 import { getClient, type ApiClientOptions } from './client.js';
 import type { BulkSend, Document, PaginatedResponse } from '../types/api.js';
-import { FileError } from '../lib/errors.js';
-import { normalizePaginatedResponse } from '../lib/pagination.js';
+import { CsvError, FileError, mapAxiosError } from '../lib/errors.js';
+import { normalizePaginatedResponse, normalizePaginationParams, type PaginationParams } from '../lib/pagination.js';
 import { readCsvForUpload } from '../lib/csv.js';
+
+function rethrowCsvValidationError(err: unknown): never {
+  if (axios.isAxiosError(err) && (err.response?.status === 400 || err.response?.status === 422)) {
+    const apiError = mapAxiosError(err);
+    throw new CsvError(apiError.message, apiError.hint);
+  }
+  throw err;
+}
 
 export async function createBulkSend(
   payload: {
@@ -24,13 +33,17 @@ export async function createBulkSend(
   const csv = readCsvForUpload(payload.csv_file, payload.limit);
   const csvBase64 = Buffer.from(csv.content).toString('base64');
 
-  const { data } = await client.post<BulkSend>('/bulk_sends', {
-    template_ids: payload.template_ids,
-    name: payload.name,
-    bulk_send_csv: csvBase64,
-    test_mode: payload.test_mode,
-  });
-  return data;
+  try {
+    const { data } = await client.post<BulkSend>('/bulk_sends', {
+      template_ids: payload.template_ids,
+      name: payload.name,
+      bulk_send_csv: csvBase64,
+      test_mode: payload.test_mode,
+    });
+    return data;
+  } catch (err) {
+    rethrowCsvValidationError(err);
+  }
 }
 
 export async function getBulkSend(id: string, options: ApiClientOptions = {}): Promise<BulkSend> {
@@ -40,22 +53,24 @@ export async function getBulkSend(id: string, options: ApiClientOptions = {}): P
 }
 
 export async function listBulkSends(
-  params: { page?: number; limit?: number } = {},
+  params: PaginationParams = {},
   options: ApiClientOptions = {},
 ): Promise<PaginatedResponse<BulkSend>> {
   const client = getClient(options);
-  const { data } = await client.get('/bulk_sends', { params });
-  return normalizePaginatedResponse<BulkSend>(data, ['bulk_sends'], params);
+  const apiParams = normalizePaginationParams(params);
+  const { data } = await client.get('/bulk_sends', { params: apiParams });
+  return normalizePaginatedResponse<BulkSend>(data, ['bulk_sends'], apiParams);
 }
 
 export async function listBulkSendDocuments(
   id: string,
-  params: { page?: number; limit?: number } = {},
+  params: PaginationParams = {},
   options: ApiClientOptions = {},
 ): Promise<PaginatedResponse<Document>> {
   const client = getClient(options);
-  const { data } = await client.get(`/bulk_sends/${id}/documents`, { params });
-  return normalizePaginatedResponse<Document>(data, ['documents'], params);
+  const apiParams = normalizePaginationParams(params);
+  const { data } = await client.get(`/bulk_sends/${id}/documents`, { params: apiParams });
+  return normalizePaginatedResponse<Document>(data, ['documents'], apiParams);
 }
 
 export async function getCsvTemplate(
@@ -83,9 +98,13 @@ export async function validateCsv(
   const csv = readCsvForUpload(payload.csv_file);
   const csvBase64 = Buffer.from(csv.content).toString('base64');
 
-  const { data } = await client.post('/bulk_sends/validate_csv', {
-    template_ids: payload.template_ids,
-    bulk_send_csv: csvBase64,
-  });
-  return data;
+  try {
+    const { data } = await client.post('/bulk_sends/validate_csv', {
+      template_ids: payload.template_ids,
+      bulk_send_csv: csvBase64,
+    });
+    return data;
+  } catch (err) {
+    rethrowCsvValidationError(err);
+  }
 }

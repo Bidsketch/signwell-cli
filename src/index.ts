@@ -15,18 +15,36 @@ function hasRawFlag(args: string[], flag: string): boolean {
   return args.some((arg) => arg === `--${flag}` || arg.startsWith(`--${flag}=`));
 }
 
+function parseRawNoColor(args: string[]): boolean | undefined {
+  let rawArg: string | undefined;
+  for (let i = args.length - 1; i >= 0; i--) {
+    const arg = args[i];
+    if (arg === '--no-color' || arg.startsWith('--no-color=')) {
+      rawArg = arg;
+      break;
+    }
+  }
+  if (!rawArg) return undefined;
+  if (rawArg === '--no-color') return true;
+
+  const value = rawArg.slice('--no-color='.length).toLowerCase();
+  return !['0', 'false', 'no', 'off'].includes(value);
+}
+
 function configureOutputFromRawArgs(): { json: boolean; quiet: boolean; noColor: boolean } {
   const args = hideBin(process.argv);
+  const rawNoColor = parseRawNoColor(args);
   const output = {
     json: hasRawFlag(args, 'json'),
     quiet: hasRawFlag(args, 'quiet'),
-    noColor: args.includes('--no-color') || process.env.NO_COLOR !== undefined,
+    noColor: process.env.NO_COLOR !== undefined || rawNoColor === true,
   };
   setOutputMode(output);
   return output;
 }
 
 const cli = yargs(hideBin(process.argv))
+  .parserConfiguration({ 'boolean-negation': false })
   .scriptName('sw')
   .usage('$0 <command> [options]')
   .option('profile', {
@@ -65,12 +83,11 @@ const cli = yargs(hideBin(process.argv))
     global: true,
   })
   .middleware((argv) => {
+    const rawNoColor = parseRawNoColor(hideBin(process.argv));
     setOutputMode({
       json: argv.json,
       quiet: argv.quiet,
-      noColor: process.env.NO_COLOR !== undefined ||
-        (argv as Record<string, unknown>).color === false ||
-        argv.noColor === true,
+      noColor: process.env.NO_COLOR !== undefined || rawNoColor === true,
     });
   })
   .version()

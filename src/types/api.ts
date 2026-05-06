@@ -99,7 +99,6 @@ export interface Webhook {
   id: string;
   url: string;
   event_types?: string[];
-  secret?: string;
   created_at?: string;
   [key: string]: unknown;
 }

@@ -44,12 +44,38 @@ describe('templates API', () => {
     expect(result.data).toHaveLength(2);
   });
 
+  it('maps legacy limit pagination input to API per_page', async () => {
+    nock(BASE_URL)
+      .get('/document_templates')
+      .query({ page: 1, per_page: 100 })
+      .reply(200, templatesListFixture);
+
+    const result = await listTemplates({ page: 1, limit: 100 });
+    expect(result.per_page).toBe(100);
+  });
+
   it('deletes a template', async () => {
     nock(BASE_URL)
       .delete('/document_templates/tmpl_abc123')
       .reply(204);
 
     await expect(deleteTemplate('tmpl_abc123')).resolves.not.toThrow();
+  });
+
+  it('creates document from template as draft by default', async () => {
+    const draftDoc = { ...documentFixture, status: 'draft', template_id: 'tmpl_abc123' };
+
+    const createScope = nock(BASE_URL)
+      .post('/document_templates/documents', (body: any) => body.draft === true)
+      .reply(201, draftDoc);
+
+    const doc = await createDocumentFromTemplate({
+      template_ids: ['tmpl_abc123'],
+      recipients: [{ placeholder_name: 'Signer', email: 'alice@example.com', name: 'Alice Smith' }],
+    });
+
+    expect(doc.status).toBe('draft');
+    expect(createScope.isDone()).toBe(true);
   });
 
   it('creates document from template with draft:true when --send is used, then sends explicitly', async () => {

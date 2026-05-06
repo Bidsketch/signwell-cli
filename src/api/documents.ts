@@ -1,6 +1,6 @@
 import { getClient, type ApiClientOptions } from './client.js';
 import type { Document, DocumentFile, PaginatedResponse } from '../types/api.js';
-import { normalizePaginatedResponse } from '../lib/pagination.js';
+import { normalizePaginatedResponse, normalizePaginationParams, type PaginationParams } from '../lib/pagination.js';
 
 export interface CreateDocumentPayload {
   name?: string;
@@ -29,6 +29,7 @@ export async function createDocument(
 ): Promise<Document> {
   const client = getClient(options);
   const body = {
+    draft: true,
     ...payload,
     recipients: payload.recipients.map((r, i) => ({
       id: r.id || String(i + 1),
@@ -46,12 +47,13 @@ export async function getDocument(id: string, options: ApiClientOptions = {}): P
 }
 
 export async function listDocuments(
-  params: { page?: number; limit?: number; status?: string } = {},
+  params: PaginationParams & { status?: string } = {},
   options: ApiClientOptions = {},
 ): Promise<PaginatedResponse<Document>> {
   const client = getClient(options);
-  const { data } = await client.get('/documents', { params });
-  return normalizePaginatedResponse<Document>(data, ['documents'], params);
+  const apiParams = normalizePaginationParams(params);
+  const { data } = await client.get('/documents', { params: apiParams });
+  return normalizePaginatedResponse<Document>(data, ['documents'], apiParams);
 }
 
 export async function sendDocument(id: string, options: ApiClientOptions = {}): Promise<Document> {
@@ -114,6 +116,7 @@ export async function createDocumentFromTemplate(
 ): Promise<Document> {
   const client = getClient(options);
   const body = {
+    draft: true,
     ...payload,
     recipients: payload.recipients.map((r, i) => ({
       id: r.id || `recipient_${i + 1}`,

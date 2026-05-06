@@ -156,7 +156,7 @@ export function registerBulkSendCommand(yargs: Argv): Argv {
             if (fetchAll) {
               const spin = spinner('Fetching all bulk sends...');
               const fetcher = (page: number, perPage: number) =>
-                bulkApi.listBulkSends({ page, limit: perPage });
+                bulkApi.listBulkSends({ page, per_page: perPage });
 
               const items: unknown[] = [];
               for await (const bs of paginate(fetcher, {
@@ -187,7 +187,7 @@ export function registerBulkSendCommand(yargs: Argv): Argv {
             const spin = spinner('Fetching bulk sends...');
             const result = await bulkApi.listBulkSends({
               page: argv.page,
-              limit: argv.perPage,
+              per_page: argv.perPage,
             });
             spin.succeed('Bulk sends retrieved');
 
@@ -235,7 +235,7 @@ export function registerBulkSendCommand(yargs: Argv): Argv {
             if (fetchAll) {
               const spin = spinner('Fetching all documents...');
               const fetcher = (page: number, perPage: number) =>
-                bulkApi.listBulkSendDocuments(argv.id as string, { page, limit: perPage });
+                bulkApi.listBulkSendDocuments(argv.id as string, { page, per_page: perPage });
 
               const items: unknown[] = [];
               for await (const doc of paginate(fetcher, {
@@ -266,7 +266,7 @@ export function registerBulkSendCommand(yargs: Argv): Argv {
             const spin = spinner('Fetching documents...');
             const result = await bulkApi.listBulkSendDocuments(argv.id as string, {
               page: argv.page,
-              limit: argv.perPage,
+              per_page: argv.perPage,
             });
             spin.succeed('Documents retrieved');
 

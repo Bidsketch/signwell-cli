@@ -12,15 +12,21 @@ const SUPPORTED_MIMES = new Set([
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   'application/vnd.ms-powerpoint',
   'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'application/vnd.apple.pages',
+  'application/vnd.apple.keynote',
+  'application/vnd.apple.numbers',
   'image/png',
   'image/jpeg',
+  'image/tiff',
+  'image/webp',
+  'text/html',
 ]);
 
 export function validateFileType(filePath: string): void {
   const mime = lookup(filePath);
   if (mime && !SUPPORTED_MIMES.has(mime)) {
     throw new FileError(
-      `Unsupported file type: ${mime} for ${filePath}. Supported: PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX, PNG, JPG`,
+      `Unsupported file type: ${mime} for ${filePath}. Supported: PDF, DOC, DOCX, PAGES, PPT, PPTX, KEY, XLS, XLSX, NUMBERS, JPG, JPEG, PNG, TIFF, TIF, WEBP, HTML, HTM`,
     );
   }
 }

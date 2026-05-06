@@ -41,7 +41,6 @@ describe('webhooks API', () => {
       event_types: ['document_completed'],
     });
     expect(webhook.id).toBe('hook_abc123');
-    expect(webhook.secret).toBe('whsec_test123');
   });
 
   it('deletes a webhook', async () => {

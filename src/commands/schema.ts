@@ -79,8 +79,21 @@ const schemas: Record<string, { description: string; input: z.ZodType; output: z
     description: 'List documents with pagination',
     input: z.object({
       page: z.number().optional(),
-      limit: z.number().optional(),
-      status: z.enum(['pending', 'completed', 'cancelled', 'draft']).optional(),
+      per_page: z.number().optional(),
+      status: z.enum([
+        'draft',
+        'saved',
+        'sent',
+        'shared',
+        'viewed',
+        'pending',
+        'completed',
+        'expired',
+        'canceled',
+        'declined',
+        'bounced',
+        'error',
+      ]).optional(),
     }),
     output: z.object({
       success: z.boolean(),
@@ -94,7 +107,7 @@ const schemas: Record<string, { description: string; input: z.ZodType; output: z
         count: z.number(),
         total: z.number(),
         page: z.number(),
-        limit: z.number(),
+        per_page: z.number(),
         total_pages: z.number(),
       }),
     }),
@@ -127,7 +140,7 @@ const schemas: Record<string, { description: string; input: z.ZodType; output: z
     description: 'List templates with pagination',
     input: z.object({
       page: z.number().optional(),
-      limit: z.number().optional(),
+      per_page: z.number().optional(),
     }),
     output: z.object({
       success: z.boolean(),
@@ -136,7 +149,7 @@ const schemas: Record<string, { description: string; input: z.ZodType; output: z
     }),
   },
   'templates.use': {
-    description: 'Create a document from a template',
+    description: 'Create a draft document from a template',
     input: z.object({
       template_ids: z.array(z.string()).min(1),
       recipients: z.array(z.object({
@@ -179,7 +192,7 @@ const schemas: Record<string, { description: string; input: z.ZodType; output: z
     }),
     output: z.object({
       success: z.boolean(),
-      data: z.object({ id: z.string(), url: z.string(), secret: z.string().optional() }),
+      data: z.object({ id: z.string(), url: z.string() }),
       meta: z.object({}).passthrough(),
     }),
   },

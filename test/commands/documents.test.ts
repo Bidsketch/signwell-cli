@@ -45,6 +45,16 @@ describe('documents API', () => {
     expect(result.total).toBe(2);
   });
 
+  it('maps legacy limit pagination input to API per_page', async () => {
+    nock(BASE_URL)
+      .get('/documents')
+      .query({ page: 1, per_page: 100 })
+      .reply(200, documentsListFixture);
+
+    const result = await listDocuments({ page: 1, limit: 100 });
+    expect(result.per_page).toBe(100);
+  });
+
   it('retries once after a 429 rate limit response', async () => {
     resetClient();
     createApiClient({ apiKey: 'test-api-key', baseUrl: BASE_URL, testMode: true, retries: 1 });
@@ -62,8 +72,8 @@ describe('documents API', () => {
   });
 
   it('creates a document', async () => {
-    nock(BASE_URL)
-      .post('/documents')
+    const createScope = nock(BASE_URL)
+      .post('/documents', (body: any) => body.draft === true)
       .reply(201, documentFixture);
 
     const doc = await createDocument({
@@ -73,6 +83,7 @@ describe('documents API', () => {
     });
 
     expect(doc.id).toBe('doc_abc123');
+    expect(createScope.isDone()).toBe(true);
   });
 
   it('sends a document', async () => {

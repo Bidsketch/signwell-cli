@@ -31,6 +31,35 @@ describe('upload', () => {
     expect(result.file_url).toBeUndefined();
   });
 
+  it('accepts all file extensions supported by the SignWell API docs', async () => {
+    const supportedExtensions = [
+      'pdf',
+      'doc',
+      'docx',
+      'pages',
+      'ppt',
+      'pptx',
+      'key',
+      'xls',
+      'xlsx',
+      'numbers',
+      'jpg',
+      'jpeg',
+      'png',
+      'tiff',
+      'tif',
+      'webp',
+      'html',
+      'htm',
+    ];
+
+    for (const extension of supportedExtensions) {
+      const filePath = path.join(tmpDir, `test.${extension}`);
+      fs.writeFileSync(filePath, `fake ${extension} content`);
+      await expect(resolveFile(filePath)).resolves.toMatchObject({ name: `test.${extension}` });
+    }
+  });
+
   it('accepts PPTX and XLSX files', async () => {
     const pptxPath = path.join(tmpDir, 'slides.pptx');
     const xlsxPath = path.join(tmpDir, 'sheet.xlsx');
