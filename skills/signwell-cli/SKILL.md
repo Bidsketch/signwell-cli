@@ -43,12 +43,19 @@ sw auth login --api-key <KEY> --test-mode --json
 ### Documents
 
 ```bash
-# Create and send a document (sent on creation by default)
+# Create a draft document from an uploaded file
 sw documents create \
   --file <path-to-file> \
   --recipient "email@example.com:Recipient Name" \
   --name "Document Name" \
   --json
+
+# Send immediately when the file contains SignWell text tags
+sw documents create \
+  --file tagged-contract.pdf \
+  --recipient "email@example.com:Recipient Name" \
+  --name "Tagged Contract" \
+  --text-tags --send --json
 
 # Multiple files and recipients
 sw documents create \
@@ -65,7 +72,7 @@ sw documents create --file-url "https://example.com/doc.pdf" \
 sw documents create --file doc.pdf \
   --recipient "alice@co.com:Alice:embedded" --json
 
-# Create as draft (don't send yet)
+# Explicit draft
 sw documents create --file doc.pdf \
   --recipient "alice@co.com:Alice" --draft --json
 
@@ -133,15 +140,15 @@ sw templates update <template-id> --name "Updated NDA" --json
 # Delete a template
 sw templates delete <template-id> --confirm --json
 
-# Create document from template (sent on creation by default)
+# Create a draft document from a template with fields.
 sw templates use <template-id> \
   --recipient "Signer:alice@co.com:Alice Smith" \
   --field "company=Acme Inc" --field "date=2024-01-15" \
   --json
 
-# Simple recipient (no placeholder role)
+# Simple recipient (no placeholder role). Template use creates drafts by default.
 sw templates use <template-id> \
-  --recipient "bob@co.com:Bob" --draft --json
+  --recipient "bob@co.com:Bob" --json
 ```
 
 **Template recipient format:** `PlaceholderRole:email:name` or `email:name`
@@ -233,7 +240,7 @@ sw schema bulk-send.create
 | `--profile <name>` | Use a named profile |
 | `--test-mode` | Set test_mode on API requests (no real emails) |
 | `--debug` | Log HTTP requests/responses to stderr |
-| `--no-color` | Disable ANSI colors |
+| `--no-color` | Disable ANSI colors; bare flag and `--no-color=1` both disable color |
 
 ## Environment Variables
 
@@ -254,17 +261,21 @@ sw schema bulk-send.create
 6. **For bulk operations**, always validate CSV first with `sw bulk-send validate` before creating.
 7. **Pagination**: Use `--all --json` to get all results as NDJSON stream, or `--page N --per-page N` for specific pages.
 8. **Exit codes**: 0=success, 1=general error, 2=usage error, 3=auth error, 4=rate limited, 5=file error, 6=CSV error.
+9. **Document sends**: Document and template creation default to drafts. Use `sw documents send <id> --json` after the draft has complete fields.
+10. **File uploads**: Supported local uploads are PDF, Word, PowerPoint, Excel, Pages, Keynote, Numbers, JPG/JPEG, PNG, TIFF/TIF, WEBP, HTML, and HTM.
 
 ## Common Workflows
 
-### Send a document for signing
+### Create or send a document
 1. `sw auth status --json` — verify authenticated
-2. `sw documents create --file doc.pdf --recipient "email:Name" --name "Doc Name" --json` — documents are sent on creation by default
+2. `sw documents create --file doc.pdf --recipient "email:Name" --name "Doc Name" --json` — creates a draft for adding fields in SignWell
+3. `sw documents create --file tagged.pdf --recipient "email:Name" --name "Doc Name" --text-tags --send --json` — creates and sends when the file contains SignWell text tags
 
 ### Use a template
 1. `sw templates list --json` — find template ID
 2. `sw templates get <id> --json` — check placeholder roles and fields
-3. `sw templates use <id> --recipient "Role:email:Name" --field "key=value" --json` — sent on creation by default
+3. `sw templates use <id> --recipient "Role:email:Name" --field "key=value" --json` — create a draft from the template
+4. Review the draft, then use `sw documents send <document-id> --json` when it is ready.
 
 ### Bulk send
 1. `sw bulk-send csv-template --template <id> -o batch.csv --json` — get CSV template

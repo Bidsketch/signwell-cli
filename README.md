@@ -70,11 +70,10 @@ sw documents list
 # Download a completed document
 sw documents download doc_abc123 -o signed.pdf
 
-# Use a template
+# Create a draft from a template
 sw templates use tmpl_xyz \
   --recipient "Signer:bob@example.com:Bob" \
-  --field "company=Acme Inc" \
-  --send
+  --field "company=Acme Inc"
 ```
 
 ---
@@ -110,12 +109,11 @@ sw templates create \
   --placeholder "New Hire:hire@example.com:New Hire" \
   --text-tags
 
-# Send one to a new hire, pre-filling the start date
+# Create a draft for a new hire, pre-filling the start date
 sw templates use tmpl_offer \
   --recipient "New Hire:maria@gmail.com:Maria Chen" \
   --field "start_date=2026-04-01" \
-  --field "position=Software Engineer" \
-  --send
+  --field "position=Software Engineer"
 ```
 
 ### Sales: Batch-send NDAs to a list of prospects
@@ -151,25 +149,6 @@ sw documents list --status pending --json \
 # Export all documents to a CSV with jq
 sw documents list --all --json \
   | jq -r '[.id, .name, .status] | @csv'
-```
-
-### CI/CD: Create a document from a script
-
-```bash
-# Use env var for auth, skip prompts, suppress output
-export SIGNWELL_API_KEY="sk_live_abc123"
-export SIGNWELL_AUTO_CONFIRM="true"
-
-sw documents create \
-  --file generated-invoice.pdf \
-  --recipient "billing@client.com:Billing Dept" \
-  --name "Invoice #1042" \
-  --quiet
-
-# Check exit code
-if [ $? -eq 0 ]; then
-  echo "Invoice draft created"
-fi
 ```
 
 ### Testing: Try things out without sending real emails
@@ -230,7 +209,7 @@ Every command accepts these flags:
 | `--profile <name>` | `string` | active profile | Use a named profile from config |
 | `--json` | `boolean` | `false` | Output machine-readable JSON envelope |
 | `--quiet` | `boolean` | `false` | Suppress all output except errors |
-| `--no-color` | `boolean` | `false` | Disable ANSI color codes |
+| `--no-color` | `boolean` | `false` | Disable ANSI color codes. Bare `--no-color` and `--no-color=1` both disable color; omit it to keep color enabled. |
 | `--test-mode` | `boolean` | `false` | Inject `test_mode: true` into API requests |
 | `--debug` | `boolean` | `false` | Log HTTP requests/responses to stderr |
 | `--help, -h` | | | Show help for any command |
@@ -719,7 +698,7 @@ sw documents list --all --json       # NDJSON stream of all documents
 |--------|------|---------|-------------|
 | `--page` | `number` | `1` | Page number |
 | `--per-page` | `number` | `20` | Items per page |
-| `--status` | `string` | | Filter: `pending`, `completed`, `cancelled`, `draft` |
+| `--status` | `string` | | Filter by document status. Common API statuses include `draft`, `saved`, `sent`, `shared`, `viewed`, `pending`, `completed`, `expired`, `canceled`, `declined`, `bounced`, and `error`. |
 | `--all` / `--all-pages` | `boolean` | `false` | Fetch all pages |
 
 **API:** `GET /documents?page={page}&per_page={per_page}&status={status}`
@@ -943,19 +922,17 @@ sw templates delete tmpl_abc123 --confirm
 
 #### `sw templates use <id>`
 
-Create a document from a template and optionally send it.
+Create a draft document from a template. Use `sw documents send <id>` after reviewing the draft.
 
 ```bash
 sw templates use tmpl_abc123 \
   --recipient "Signer:alice@example.com:Alice Smith" \
   --field "company=Acme Inc" \
-  --field "date=2024-01-15" \
-  --send
+  --field "date=2024-01-15"
 
-# Simple (no placeholder role)
+# Simple recipient (no placeholder role)
 sw templates use tmpl_abc123 \
-  --recipient "bob@example.com:Bob" \
-  --draft
+  --recipient "bob@example.com:Bob"
 ```
 
 | Option | Type | Required | Description |
@@ -964,8 +941,10 @@ sw templates use tmpl_abc123 \
 | `--field` | `string[]` | | Pre-fill field as `"key=value"` |
 | `--subject` | `string` | | Override email subject |
 | `--message` | `string` | | Override email message |
-| `--send` | `boolean` | | Send immediately |
-| `--draft` | `boolean` | | Create as draft |
+| `--send` | `boolean` | | Create as draft, then send explicitly |
+| `--draft` | `boolean` | | Create as draft (default behavior) |
+
+Template use defaults to drafts so the document can be reviewed before sending. The template must already contain the required fields before a send will succeed.
 
 **Recipient formats:**
 - `Signer:alice@example.com:Alice Smith` — maps to a template placeholder role
@@ -1175,8 +1154,7 @@ sw webhooks create --url https://myapp.com/hooks --event document_completed --ev
   "success": true,
   "data": {
     "id": "hook_abc123",
-    "url": "https://myapp.com/hooks",
-    "secret": "whsec_a1b2c3..."
+    "url": "https://myapp.com/hooks"
   },
   "error": null,
   "meta": {}
@@ -1215,12 +1193,12 @@ sw webhooks listen --forward http://localhost:8080/hooks
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `--port` | `number` | `3000` | Port to listen on |
-| `--secret` | `string` | | Webhook signing secret for HMAC validation |
+| `--secret` | `string` | | Local listener HMAC secret to validate incoming signatures |
 | `--forward` | `string` | | Forward received events to this URL |
 
 **Features:**
 - Accepts `POST` requests on any path
-- Validates HMAC-SHA256 signature via `x-signwell-signature` header (if `--secret` provided)
+- Validates HMAC-SHA256 signature via `x-signwell-signature` header when you provide `--secret`. The create-webhook API does not return or manage a secret field.
 - Pretty-prints each webhook event to the console with timestamp
 - Optionally forwards events to another service (preserves signature header)
 - Returns `200 OK` for valid events, `401 Unauthorized` for invalid signatures, `405` for non-POST
@@ -1424,7 +1402,7 @@ All `--json` output follows this envelope format:
 {
   id: string;
   name: string;
-  status: "draft" | "pending" | "completed" | "cancelled" | "declined";
+  status: string;              // e.g. draft, saved, sent, shared, viewed, pending, completed, expired, canceled, declined, bounced, error
   created_at: string;          // ISO 8601
   updated_at?: string;
   expires_at?: string;
@@ -1443,7 +1421,7 @@ All `--json` output follows this envelope format:
   id: string;
   email: string;
   name: string;
-  status: "pending" | "signed" | "declined";
+  status: string;                  // e.g. pending, signed, declined
   signing_url?: string;            // URL for the signer
   embedded_signing_url?: string;   // URL for iframe embedding
   embedded_signing?: boolean;
@@ -1505,7 +1483,6 @@ All `--json` output follows this envelope format:
   id: string;
   url: string;
   event_types?: string[];
-  secret?: string;         // Only returned on creation
   created_at?: string;
 }
 ```
@@ -1640,8 +1617,18 @@ Default: 3 retries. Rate limit warnings are displayed when fewer than 5 requests
 | `.pdf` | `application/pdf` |
 | `.doc` | `application/msword` |
 | `.docx` | `application/vnd.openxmlformats-officedocument.wordprocessingml.document` |
-| `.png` | `image/png` |
+| `.pages` | `application/vnd.apple.pages` |
+| `.ppt` | `application/vnd.ms-powerpoint` |
+| `.pptx` | `application/vnd.openxmlformats-officedocument.presentationml.presentation` |
+| `.key` | `application/vnd.apple.keynote` |
+| `.xls` | `application/vnd.ms-excel` |
+| `.xlsx` | `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` |
+| `.numbers` | `application/vnd.apple.numbers` |
 | `.jpg` / `.jpeg` | `image/jpeg` |
+| `.png` | `image/png` |
+| `.tiff` / `.tif` | `image/tiff` |
+| `.webp` | `image/webp` |
+| `.html` / `.htm` | `text/html` |
 
 ### Upload Methods
 

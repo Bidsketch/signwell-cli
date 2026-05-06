@@ -4,7 +4,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { createApiClient, resetClient } from '../../src/api/client.js';
-import { createBulkSend, getBulkSend, listBulkSends } from '../../src/api/bulk-send.js';
+import { createBulkSend, getBulkSend, listBulkSends, validateCsv } from '../../src/api/bulk-send.js';
+import { CsvError } from '../../src/lib/errors.js';
 import bulkSendFixture from '../fixtures/bulk-send.json';
 
 const BASE_URL = 'https://www.signwell.com/api/v1';
@@ -48,6 +49,16 @@ describe('bulk-send API', () => {
     expect(result.data).toHaveLength(1);
   });
 
+  it('maps legacy limit pagination input to API per_page', async () => {
+    nock(BASE_URL)
+      .get('/bulk_sends')
+      .query({ page: 1, per_page: 100 })
+      .reply(200, { bulk_sends: [bulkSendFixture], total: 1 });
+
+    const result = await listBulkSends({ page: 1, limit: 100 });
+    expect(result.per_page).toBe(100);
+  });
+
   it('creates a bulk send with --limit applied to data rows only', async () => {
     const csvPath = path.join(tmpDir, 'batch.csv');
     fs.writeFileSync(csvPath, 'name,email\nAlice,alice@example.com\nBob,bob@example.com\n');
@@ -66,5 +77,19 @@ describe('bulk-send API', () => {
     });
 
     expect(result.id).toBe('bs_abc123');
+  });
+
+  it('maps API CSV validation failures to CsvError', async () => {
+    const csvPath = path.join(tmpDir, 'invalid.csv');
+    fs.writeFileSync(csvPath, 'name,email\nAlice,alice@example.com\n');
+
+    nock(BASE_URL)
+      .post('/bulk_sends/validate_csv')
+      .reply(422, { errors: { csv: ['header does not match template'] } });
+
+    await expect(validateCsv({
+      template_ids: ['tmpl_abc123'],
+      csv_file: csvPath,
+    })).rejects.toBeInstanceOf(CsvError);
   });
 });

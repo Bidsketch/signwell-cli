@@ -209,7 +209,7 @@ export function registerDocumentsCommand(yargs: Argv): Argv {
               const fetcher = (page: number, perPage: number) =>
                 docsApi.listDocuments({
                   page,
-                  limit: perPage,
+                  per_page: perPage,
                   status: argv.status as string | undefined,
                 });
 
@@ -249,7 +249,7 @@ export function registerDocumentsCommand(yargs: Argv): Argv {
             const spin = spinner('Fetching documents...');
             const result = await docsApi.listDocuments({
               page: argv.page,
-              limit: argv.perPage,
+              per_page: argv.perPage,
               status: argv.status as string | undefined,
             });
             spin.succeed('Documents retrieved');

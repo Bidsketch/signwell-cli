@@ -86,9 +86,6 @@ export function registerWebhooksCommand(yargs: Argv): Argv {
             } else {
               printSuccess(`Webhook created: ${webhook.id}`);
               printInfo(`URL: ${webhook.url}`);
-              if (webhook.secret) {
-                printInfo(`Secret: ${webhook.secret}`);
-              }
             }
           } catch (err) {
             handleOutputError(err);
@@ -150,7 +147,7 @@ export function registerWebhooksCommand(yargs: Argv): Argv {
         (yy) =>
           yy
             .option('port', { type: 'number', default: 3000, describe: 'Port to listen on' })
-            .option('secret', { type: 'string', describe: 'Webhook signing secret' })
+            .option('secret', { type: 'string', describe: 'Local listener HMAC secret' })
             .option('forward', { type: 'string', describe: 'Forward events to this URL' }),
         async (argv) => {
           const port = argv.port as number;

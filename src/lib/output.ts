@@ -97,15 +97,22 @@ export function statusColor(status: string): string {
     case 'completed':
     case 'signed':
       return chalk.green(status);
+    case 'sent':
+    case 'shared':
+    case 'viewed':
     case 'pending':
     case 'waiting':
       return chalk.yellow(status);
     case 'cancelled':
+    case 'canceled':
+    case 'expired':
+    case 'bounced':
     case 'error':
     case 'failed':
     case 'declined':
       return chalk.red(status);
     case 'draft':
+    case 'saved':
       return chalk.dim(status);
     default:
       return status;

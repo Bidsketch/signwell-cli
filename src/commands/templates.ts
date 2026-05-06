@@ -5,6 +5,7 @@ import * as templatesApi from '../api/templates.js';
 import * as docsApi from '../api/documents.js';
 import { resolveFiles } from '../lib/upload.js';
 import { paginate } from '../lib/pagination.js';
+import { UsageError } from '../lib/errors.js';
 import {
   setOutputMode,
   printJson,
@@ -149,7 +150,7 @@ export function registerTemplatesCommand(yargs: Argv): Argv {
             if (fetchAll) {
               const spin = spinner('Fetching all templates...');
               const fetcher = (page: number, perPage: number) =>
-                templatesApi.listTemplates({ page, limit: perPage });
+                templatesApi.listTemplates({ page, per_page: perPage });
 
               const items: unknown[] = [];
 
@@ -182,7 +183,7 @@ export function registerTemplatesCommand(yargs: Argv): Argv {
             const spin = spinner('Fetching templates...');
             const result = await templatesApi.listTemplates({
               page: argv.page,
-              limit: argv.perPage,
+              per_page: argv.perPage,
             });
             spin.succeed('Templates retrieved');
 
@@ -296,7 +297,7 @@ export function registerTemplatesCommand(yargs: Argv): Argv {
       )
       .command(
         'use <id>',
-        'Create a document from a template',
+        'Create a draft document from a template',
         (yy) =>
           yy
             .positional('id', { type: 'string', demandOption: true })
@@ -304,11 +305,16 @@ export function registerTemplatesCommand(yargs: Argv): Argv {
             .option('field', { type: 'string', array: true, describe: 'Pre-fill field as "key=value"' })
             .option('subject', { type: 'string', describe: 'Email subject override' })
             .option('message', { type: 'string', describe: 'Email message override' })
-            .option('send', { type: 'boolean', describe: 'Send immediately' })
-            .option('draft', { type: 'boolean', describe: 'Create as draft' }),
+            .option('send', { type: 'boolean', describe: 'Create as draft, then send' })
+            .option('draft', { type: 'boolean', describe: 'Create as draft (default)' }),
         async (argv) => {
           setOutputMode({ json: argv.json as boolean, quiet: argv.quiet as boolean });
           try {
+            const shouldSend = !!argv.send;
+            if (shouldSend && argv.draft) {
+              throw new UsageError('Cannot use --send and --draft together');
+            }
+
             createApiClient({
               profile: argv.profile as string,
               testMode: argv.testMode as boolean,
@@ -343,18 +349,24 @@ export function registerTemplatesCommand(yargs: Argv): Argv {
               template_fields: fields,
               subject: argv.subject as string | undefined,
               message: argv.message as string | undefined,
-              draft: argv.draft as boolean | undefined,
+              draft: true,
             });
 
-            spin.succeed(argv.draft ? 'Draft created from template' : 'Document created from template');
+            let outputDoc = doc;
+            if (shouldSend) {
+              spin.text = 'Sending document...';
+              outputDoc = await docsApi.sendDocument(doc.id);
+            }
+
+            spin.succeed(shouldSend ? 'Document sent from template' : 'Draft created from template');
 
             if (isJsonMode()) {
-              printJson(doc);
+              printJson(outputDoc);
             } else {
-              printInfo(`Document ID: ${doc.id}`);
-              printInfo(`Name: ${doc.name}`);
-              if (doc.recipients) {
-                for (const r of doc.recipients) {
+              printInfo(`Document ID: ${outputDoc.id}`);
+              printInfo(`Name: ${outputDoc.name}`);
+              if (outputDoc.recipients) {
+                for (const r of outputDoc.recipients) {
                   printInfo(`  ${r.name || r.email}: ${r.signing_url || '-'}`);
                 }
               }

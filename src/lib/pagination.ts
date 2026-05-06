@@ -1,5 +1,22 @@
 import type { PaginatedResponse } from '../types/api.js';
 
+export interface PaginationParams {
+  page?: number;
+  per_page?: number;
+  limit?: number;
+}
+
+export function normalizePaginationParams<T extends PaginationParams>(
+  params: T = {} as T,
+): Omit<T, 'limit'> & { per_page?: number } {
+  const { limit, per_page: perPage, ...rest } = params;
+  const pageSize = perPage ?? limit;
+  return {
+    ...rest,
+    ...(pageSize !== undefined ? { per_page: pageSize } : {}),
+  } as Omit<T, 'limit'> & { per_page?: number };
+}
+
 /**
  * Normalizes varying API list response shapes into a consistent PaginatedResponse.
  * The SignWell API uses different field names across endpoints.
@@ -7,7 +24,7 @@ import type { PaginatedResponse } from '../types/api.js';
 export function normalizePaginatedResponse<T>(
   data: Record<string, unknown>,
   itemsKeys: string[],
-  params: { limit?: number; page?: number } = {},
+  params: PaginationParams = {},
 ): PaginatedResponse<T> {
   let items: unknown = undefined;
   for (const key of itemsKeys) {
@@ -17,7 +34,7 @@ export function normalizePaginatedResponse<T>(
 
   const total = (data.total_entries ?? data.total_count ?? data.total ?? (Array.isArray(items) ? items.length : 0)) as number;
   const page = (data.current_page ?? data.page ?? params.page ?? 1) as number;
-  const limit = params.limit || 20;
+  const limit = params.per_page ?? params.limit ?? 20;
   const totalPages = ((data.total_pages as number | undefined) ?? Math.ceil(total / limit)) || 1;
 
   return {
