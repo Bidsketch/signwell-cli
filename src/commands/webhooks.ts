@@ -47,7 +47,7 @@ export function registerWebhooksCommand(yargs: Argv): Argv {
               for (const wh of webhooks) {
                 table.push([
                   wh.id,
-                  wh.url,
+                  wh.callback_url,
                   wh.event_types?.join(', ') || 'all',
                 ]);
               }
@@ -85,7 +85,7 @@ export function registerWebhooksCommand(yargs: Argv): Argv {
               printJson(webhook);
             } else {
               printSuccess(`Webhook created: ${webhook.id}`);
-              printInfo(`URL: ${webhook.url}`);
+              printInfo(`URL: ${webhook.callback_url}`);
             }
           } catch (err) {
             handleOutputError(err);

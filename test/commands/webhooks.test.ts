@@ -29,11 +29,16 @@ describe('webhooks API', () => {
     const webhooks = await listWebhooks();
     expect(webhooks).toHaveLength(1);
     expect(webhooks[0].id).toBe('hook_abc123');
+    expect(webhooks[0].callback_url).toBe('https://myapp.com/webhooks/signwell');
   });
 
   it('creates a webhook', async () => {
-    nock(BASE_URL)
-      .post('/hooks')
+    const createScope = nock(BASE_URL)
+      .post('/hooks', (body: any) =>
+        body.callback_url === 'https://myapp.com/webhooks/signwell'
+        && !('url' in body)
+        && body.event_types?.[0] === 'document_completed',
+      )
       .reply(201, webhookFixture);
 
     const webhook = await createWebhook({
@@ -41,6 +46,8 @@ describe('webhooks API', () => {
       event_types: ['document_completed'],
     });
     expect(webhook.id).toBe('hook_abc123');
+    expect(webhook.callback_url).toBe('https://myapp.com/webhooks/signwell');
+    expect(createScope.isDone()).toBe(true);
   });
 
   it('deletes a webhook', async () => {

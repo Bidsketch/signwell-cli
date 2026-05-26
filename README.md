@@ -1122,7 +1122,7 @@ sw webhooks list
   "data": [
     {
       "id": "hook_abc123",
-      "url": "https://myapp.com/webhooks/signwell",
+      "callback_url": "https://myapp.com/webhooks/signwell",
       "event_types": ["document_completed", "document_signed"],
       "created_at": "2024-01-25T10:00:00Z"
     }
@@ -1154,7 +1154,7 @@ sw webhooks create --url https://myapp.com/hooks --event document_completed --ev
   "success": true,
   "data": {
     "id": "hook_abc123",
-    "url": "https://myapp.com/hooks"
+    "callback_url": "https://myapp.com/hooks"
   },
   "error": null,
   "meta": {}
@@ -1481,7 +1481,7 @@ All `--json` output follows this envelope format:
 ```typescript
 {
   id: string;
-  url: string;
+  callback_url: string;
   event_types?: string[];
   created_at?: string;
 }
