@@ -848,6 +848,8 @@ sw templates create \
 | `--text-tags` | `boolean` | | Enable text tag parsing |
 | `--fields` | `string` | | Path to fields JSON file |
 
+A template is only usable by sw templates use once it has fields. Either pass a file that contains SignWell text tags with --text-tags, supply explicit field coordinates via --fields fields.json, or open the template in SignWell and add fields manually.
+
 **API:** `POST /document_templates`
 
 **JSON output:** `Template` object.
