@@ -25,7 +25,7 @@ export function createApiClient(options: ApiClientOptions = {}): AxiosInstance {
   }
 
   const baseURL = options.baseUrl || getBaseUrl();
-  const testMode = options.testMode ?? getTestMode(options.profile);
+  const testMode = getTestMode(options.profile, options.testMode);
   const debug = options.debug ?? false;
 
   clientTestMode = testMode;

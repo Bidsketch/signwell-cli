@@ -97,7 +97,7 @@ export interface BulkSend {
 
 export interface Webhook {
   id: string;
-  url: string;
+  callback_url: string;
   event_types?: string[];
   created_at?: string;
   [key: string]: unknown;

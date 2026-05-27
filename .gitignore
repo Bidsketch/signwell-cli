@@ -8,3 +8,4 @@ coverage/
 .claude/
 CLI_TEST_SPEC.md
 docs/
+/.agents

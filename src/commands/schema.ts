@@ -1,6 +1,5 @@
 import type { Argv } from 'yargs';
 import { z } from 'zod';
-import { printInfo, setOutputMode } from '../lib/output.js';
 
 // Zod schemas for all command inputs
 const FileInput = z.object({
@@ -192,7 +191,7 @@ const schemas: Record<string, { description: string; input: z.ZodType; output: z
     }),
     output: z.object({
       success: z.boolean(),
-      data: z.object({ id: z.string(), url: z.string() }),
+      data: z.object({ id: z.string(), callback_url: z.string() }),
       meta: z.object({}).passthrough(),
     }),
   },
@@ -277,7 +276,9 @@ export function registerSchemaCommand(yargs: Argv): Argv {
         output_schema: zodToJsonSchema(schema.output),
       };
 
-      printInfo(JSON.stringify(output, null, 2));
+      if (!argv.quiet) {
+        process.stdout.write(JSON.stringify(output, null, 2) + '\n');
+      }
     },
   );
 }

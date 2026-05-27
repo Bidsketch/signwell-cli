@@ -1,6 +1,6 @@
 {
   "id": "hook_abc123",
-  "url": "https://myapp.com/webhooks/signwell",
+  "callback_url": "https://myapp.com/webhooks/signwell",
   "event_types": ["document_completed", "document_signed"],
   "created_at": "2024-01-25T10:00:00Z"
 }
