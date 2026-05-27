@@ -126,7 +126,11 @@ sw templates create \
   --file-url "https://example.com/nda.pdf" \
   --name "Standard NDA" \
   --placeholder "Client" --json
+```
 
+A template is only usable by sw templates use once it has fields. Either pass a file that contains SignWell text tags with --text-tags, supply explicit field coordinates via --fields fields.json, or open the template in SignWell and add fields manually.
+
+```bash
 # Get template details
 sw templates get <template-id> --json
 
@@ -152,6 +156,8 @@ sw templates use <template-id> \
 ```
 
 **Template recipient format:** `PlaceholderRole:email:name` or `email:name`
+
+For sw templates use, --field "key=value" uses the field's api_id as key; run `sw templates get <id> --json` to find field api_id values.
 
 ### Bulk Send
 
