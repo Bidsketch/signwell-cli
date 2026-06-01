@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import nock from 'nock';
 import { createApiClient, resetClient } from '../../src/api/client.js';
 import { getDocument, listDocuments, createDocument, sendDocument, deleteDocument } from '../../src/api/documents.js';
+import { buildDocumentListPageParams, buildDocumentListParams, buildDocumentListQuery } from '../../src/commands/documents.js';
+import { UsageError } from '../../src/lib/errors.js';
 import documentFixture from '../fixtures/document.json';
 import documentsListFixture from '../fixtures/documents-list.json';
 
@@ -37,7 +39,7 @@ describe('documents API', () => {
   it('lists documents', async () => {
     nock(BASE_URL)
       .get('/documents')
-      .query({ page: 1, per_page: 20 })
+      .query({ page: 1, limit: 20 })
       .reply(200, documentsListFixture);
 
     const result = await listDocuments({ page: 1, per_page: 20 });
@@ -45,10 +47,20 @@ describe('documents API', () => {
     expect(result.total).toBe(2);
   });
 
-  it('maps legacy limit pagination input to API per_page', async () => {
+  it('maps per_page pagination input to API limit', async () => {
     nock(BASE_URL)
       .get('/documents')
-      .query({ page: 1, per_page: 100 })
+      .query({ page: 1, limit: 100 })
+      .reply(200, documentsListFixture);
+
+    const result = await listDocuments({ page: 1, per_page: 100 });
+    expect(result.per_page).toBe(100);
+  });
+
+  it('maps limit pagination input to API limit', async () => {
+    nock(BASE_URL)
+      .get('/documents')
+      .query({ page: 1, limit: 100 })
       .reply(200, documentsListFixture);
 
     const result = await listDocuments({ page: 1, limit: 100 });
@@ -61,14 +73,96 @@ describe('documents API', () => {
 
     nock(BASE_URL)
       .get('/documents')
-      .query({ page: 1, per_page: 20 })
+      .query({ page: 1, limit: 20 })
       .reply(429, { error: 'rate limited' })
       .get('/documents')
-      .query({ page: 1, per_page: 20 })
+      .query({ page: 1, limit: 20 })
       .reply(200, documentsListFixture);
 
     const result = await listDocuments({ page: 1, per_page: 20 });
     expect(result.data).toHaveLength(2);
+  });
+
+  it('passes raw query filters to the documents API', async () => {
+    const query = 'name:Classic AND status:completed AND start_date:2026-01-31';
+
+    nock(BASE_URL)
+      .get('/documents')
+      .query({ page: 2, limit: 30, query })
+      .reply(200, documentsListFixture);
+
+    const result = await listDocuments({ page: 2, limit: 30, query });
+    expect(result.per_page).toBe(30);
+  });
+
+  it('sends only supported top-level document list params', async () => {
+    const query = 'status:completed';
+
+    nock(BASE_URL)
+      .get('/documents')
+      .query((params) => {
+        expect(params).toEqual({ page: '2', limit: '30', query });
+        return true;
+      })
+      .reply(200, documentsListFixture);
+
+    const result = await listDocuments({
+      page: 2,
+      limit: 30,
+      per_page: 50,
+      query,
+      status: 'completed',
+    } as any);
+    expect(result.per_page).toBe(30);
+  });
+
+  it('builds status filters into query syntax', () => {
+    expect(buildDocumentListQuery({ status: 'completed' })).toBe('status:completed');
+  });
+
+  it('builds raw and named filters into query syntax', () => {
+    expect(buildDocumentListQuery({
+      query: 'name:Classic',
+      name: 'small-contract',
+      person: 'alice@example.com',
+      startDate: '2026-02-01',
+      endDate: '2026-02-28',
+      documentIds: ['doc_1,doc_2', 'doc_3'],
+    })).toBe(
+      'name:Classic AND name:small-contract AND person:alice@example.com AND start_date:2026-02-01 AND end_date:2026-02-28 AND document_ids:doc_1,doc_2,doc_3',
+    );
+  });
+
+  it('builds list params from CLI pagination aliases and filters', () => {
+    expect(buildDocumentListParams({
+      page: 2,
+      perPage: 50,
+      status: 'pending',
+    })).toEqual({
+      page: 2,
+      limit: 50,
+      query: 'status:pending',
+    });
+  });
+
+  it('builds all-page list params with the current query and page size', () => {
+    expect(buildDocumentListPageParams('name:Codex AND status:draft', 3, 50)).toEqual({
+      page: 3,
+      limit: 50,
+      query: 'name:Codex AND status:draft',
+    });
+  });
+
+  it('rejects invalid date filters', () => {
+    expect(() => buildDocumentListQuery({ startDate: '02/15/2026' })).toThrow(UsageError);
+  });
+
+  it('rejects raw OR filters', () => {
+    expect(() => buildDocumentListQuery({ query: 'name:Codex OR status:draft' })).toThrow(UsageError);
+  });
+
+  it('rejects document list limits outside the API range', () => {
+    expect(() => buildDocumentListParams({ limit: 100 })).toThrow(UsageError);
   });
 
   it('creates a document', async () => {

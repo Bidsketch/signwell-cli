@@ -90,6 +90,11 @@ sw documents list --json
 sw documents list --status pending --json
 sw documents list --status completed --json
 sw documents list --page 2 --per-page 50 --json
+sw documents list --limit 30 --page 2 --json
+sw documents list --name small-contract --status completed --json
+sw documents list --start-date 2026-02-01 --end-date 2026-02-28 --json
+sw documents list --document-ids doc_abc123,doc_def456 --json
+sw documents list --query "name:Classic AND status:completed AND start_date:2026-01-31" --json
 sw documents list --all --json   # streams NDJSON
 
 # Send a draft document
@@ -244,7 +249,7 @@ sw schema bulk-send.create
 | `--json` | Machine-readable JSON output (always use this) |
 | `--quiet` | Suppress all output except errors |
 | `--profile <name>` | Use a named profile |
-| `--test-mode` | Set test_mode on API requests (no real emails) |
+| `--test-mode` | Set `test_mode: true` on POST/PUT/PATCH request bodies |
 | `--debug` | Log HTTP requests/responses to stderr |
 | `--no-color` | Disable ANSI colors; bare flag and `--no-color=1` both disable color |
 
@@ -262,10 +267,10 @@ sw schema bulk-send.create
 1. **Always use `--json`** to get structured output you can parse.
 2. **Use `--confirm`** on destructive operations (delete, remove) to skip interactive prompts.
 3. **Set `SIGNWELL_AUTO_CONFIRM=true`** for fully non-interactive scripting.
-4. **Use `--test-mode`** when the user wants to test without sending real emails.
+4. **Use `--test-mode`** for write flows the user wants to run in SignWell test mode.
 5. **Check auth first** with `sw auth status --json` before running commands.
 6. **For bulk operations**, always validate CSV first with `sw bulk-send validate` before creating.
-7. **Pagination**: Use `--all --json` to get all results as NDJSON stream, or `--page N --per-page N` for specific pages.
+7. **Pagination and filters**: Use `--all --json` to get all results as NDJSON stream, or `--page N --per-page N` / `--limit N` for specific pages. Document list page size must be 1-50. Document list sends only `page`, `limit`, and `query` to the API. Filters use API `query=` syntax; prefer flags like `--name`, `--status`, `--person`, `--start-date`, `--end-date`, and `--document-ids`, or pass raw syntax with `--query "name:Classic AND status:completed"`. Use `AND`; `OR` and `keyword` are not supported document filters.
 8. **Exit codes**: 0=success, 1=general error, 2=usage error, 3=auth error, 4=rate limited, 5=file error, 6=CSV error.
 9. **Document sends**: Document and template creation default to drafts. Use `sw documents send <id> --json` after the draft has complete fields.
 10. **File uploads**: Supported local uploads are PDF, Word, PowerPoint, Excel, Pages, Keynote, Numbers, JPG/JPEG, PNG, TIFF/TIF, WEBP, HTML, and HTM.

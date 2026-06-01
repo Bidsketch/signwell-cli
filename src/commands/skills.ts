@@ -90,8 +90,8 @@ function getSkillsSourceDir(): string {
   throw new Error('Could not locate the skills directory. Ensure the package is installed correctly.');
 }
 
-function copySkillsToDir(sourceDir: string, targetDir: string): string[] {
-  const installed: string[] = [];
+function copySkillsToDir(sourceDir: string, targetDir: string, force: boolean): string[] {
+  const present: string[] = [];
   const entries = readdirSync(sourceDir, { withFileTypes: true });
 
   for (const entry of entries) {
@@ -103,20 +103,24 @@ function copySkillsToDir(sourceDir: string, targetDir: string): string[] {
 
     const skillTarget = resolve(targetDir, entry.name);
 
-    // Clean existing install
     if (existsSync(skillTarget)) {
+      if (!force) {
+        present.push(entry.name); // already installed, skip without --force
+        continue;
+      }
+      // --force: remove and refresh
       rmSync(skillTarget, { recursive: true, force: true });
     }
 
     mkdirSync(skillTarget, { recursive: true });
     cpSync(skillSource, skillTarget, { recursive: true, force: true });
-    installed.push(entry.name);
+    present.push(entry.name);
   }
 
-  return installed;
+  return present;
 }
 
-function createSymlink(target: string, linkPath: string): boolean {
+function createSymlink(target: string, linkPath: string, force: boolean): boolean {
   try {
     // Check if link already points to the right place
     if (existsSync(linkPath)) {
@@ -128,11 +132,20 @@ function createSymlink(target: string, linkPath: string): boolean {
           if (resolvedExisting === resolve(target)) {
             return true; // Already correct
           }
+          if (!force) {
+            return false;
+          }
           rmSync(linkPath); // Wrong target, remove
         } else {
+          if (!force) {
+            return false;
+          }
           rmSync(linkPath, { recursive: true }); // Not a symlink, remove
         }
       } catch {
+        if (!force) {
+          return false;
+        }
         rmSync(linkPath, { recursive: true, force: true });
       }
     }
@@ -148,16 +161,19 @@ function createSymlink(target: string, linkPath: string): boolean {
   }
 }
 
-function copyFallback(source: string, target: string): boolean {
+function copyFallback(source: string, target: string, force: boolean): 'copy' | 'existing' | 'failed' {
   try {
     if (existsSync(target)) {
+      if (!force) {
+        return 'existing';
+      }
       rmSync(target, { recursive: true, force: true });
     }
     mkdirSync(target, { recursive: true });
     cpSync(source, target, { recursive: true, force: true });
-    return true;
+    return 'copy';
   } catch {
-    return false;
+    return 'failed';
   }
 }
 
@@ -186,10 +202,11 @@ export function registerSkillsCommand(yargs: Argv): Argv {
 
             try {
               const sourceDir = getSkillsSourceDir();
+              const force = argv.force as boolean;
 
               // 1. Copy to canonical ~/.agents/skills/
               mkdirSync(CANONICAL_DIR, { recursive: true });
-              const skillNames = copySkillsToDir(sourceDir, CANONICAL_DIR);
+              const skillNames = copySkillsToDir(sourceDir, CANONICAL_DIR, force);
 
               if (skillNames.length === 0) {
                 throw new Error('No skills found in package.');
@@ -219,15 +236,15 @@ export function registerSkillsCommand(yargs: Argv): Argv {
                   }
 
                   // Try symlink first, fall back to copy
-                  const linked = createSymlink(canonicalSkillDir, agentSkillDir);
+                  const linked = createSymlink(canonicalSkillDir, agentSkillDir, force);
                   if (linked) {
                     results.push({ agent: agent.displayName, skill: skillName, method: 'symlink' });
                   } else {
-                    const copied = copyFallback(canonicalSkillDir, agentSkillDir);
+                    const copied = copyFallback(canonicalSkillDir, agentSkillDir, force);
                     results.push({
                       agent: agent.displayName,
                       skill: skillName,
-                      method: copied ? 'copy' : 'failed',
+                      method: copied,
                     });
                   }
                 }

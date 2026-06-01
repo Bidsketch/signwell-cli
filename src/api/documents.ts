@@ -1,6 +1,6 @@
 import { getClient, type ApiClientOptions } from './client.js';
 import type { Document, DocumentFile, PaginatedResponse } from '../types/api.js';
-import { normalizePaginatedResponse, normalizePaginationParams, type PaginationParams } from '../lib/pagination.js';
+import { normalizePaginatedResponse, type PaginationParams } from '../lib/pagination.js';
 
 export interface CreateDocumentPayload {
   name?: string;
@@ -21,6 +21,10 @@ export interface CreateDocumentPayload {
     name?: string;
     signing_order?: number;
   }>;
+}
+
+export interface DocumentListParams extends PaginationParams {
+  query?: string;
 }
 
 export async function createDocument(
@@ -47,11 +51,16 @@ export async function getDocument(id: string, options: ApiClientOptions = {}): P
 }
 
 export async function listDocuments(
-  params: PaginationParams & { status?: string } = {},
+  params: DocumentListParams = {},
   options: ApiClientOptions = {},
 ): Promise<PaginatedResponse<Document>> {
   const client = getClient(options);
-  const apiParams = normalizePaginationParams(params);
+  const pageSize = params.limit ?? params.per_page;
+  const apiParams = {
+    ...(params.page !== undefined ? { page: params.page } : {}),
+    ...(pageSize !== undefined ? { limit: pageSize } : {}),
+    ...(params.query !== undefined ? { query: params.query } : {}),
+  };
   const { data } = await client.get('/documents', { params: apiParams });
   return normalizePaginatedResponse<Document>(data, ['documents'], apiParams);
 }

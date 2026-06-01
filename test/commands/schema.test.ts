@@ -56,4 +56,20 @@ describe('schema command', () => {
     expect(schema.output_schema.type).toBe('object');
     expect(schema.success).toBeUndefined();
   });
+
+  it('exposes document list pagination and filter inputs', () => {
+    runSchemaCommand(['schema', 'documents.list', '--json']);
+
+    const output = stdoutSpy.mock.calls.map(([chunk]: [unknown]) => String(chunk)).join('');
+    const schema = JSON.parse(output);
+    const properties = schema.input_schema.properties;
+
+    expect(properties.limit.type).toBe('number');
+    expect(properties.query.type).toBe('string');
+    expect(properties.name.type).toBe('string');
+    expect(properties.person.type).toBe('string');
+    expect(properties.start_date.type).toBe('string');
+    expect(properties.end_date.type).toBe('string');
+    expect(properties.document_ids.type).toBe('array');
+  });
 });
