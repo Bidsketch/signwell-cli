@@ -30,8 +30,7 @@ export function registerBulkSendCommand(yargs: Argv): Argv {
             .option('name', { type: 'string', describe: 'Bulk send name' })
             .option('dry-run', { type: 'boolean', describe: 'Validate without sending' })
             .option('limit', { type: 'number', describe: 'Limit to first N rows' })
-            .option('confirm', { type: 'boolean', describe: 'Skip confirmation' })
-            .option('progress', { type: 'boolean', describe: 'Show progress bar' }),
+            .option('confirm', { type: 'boolean', describe: 'Skip confirmation' }),
         async (argv) => {
           setOutputMode({ json: argv.json as boolean, quiet: argv.quiet as boolean });
           try {

@@ -79,6 +79,9 @@ const schemas: Record<string, { description: string; input: z.ZodType; output: z
     input: z.object({
       page: z.number().optional(),
       per_page: z.number().optional(),
+      limit: z.number().optional(),
+      query: z.string().optional(),
+      name: z.string().optional(),
       status: z.enum([
         'draft',
         'saved',
@@ -93,6 +96,10 @@ const schemas: Record<string, { description: string; input: z.ZodType; output: z
         'bounced',
         'error',
       ]).optional(),
+      person: z.string().optional(),
+      start_date: z.string().optional(),
+      end_date: z.string().optional(),
+      document_ids: z.array(z.string()).optional(),
     }),
     output: z.object({
       success: z.boolean(),

@@ -28,6 +28,7 @@ A full-featured Node.js CLI for the [SignWell](https://www.signwell.com) eSignat
 - [Environment Variables](#environment-variables)
 - [File Upload](#file-upload)
 - [Pagination](#pagination)
+- [Dependency Pinning & Security](#dependency-pinning--security)
 - [Development](#development)
 
 ---
@@ -45,7 +46,7 @@ npx signwell-cli documents list
 # Or from source
 git clone https://github.com/Bidsketch/signwell-cli.git
 cd signwell-cli
-npm install
+npm ci
 npm run build
 npm link
 ```
@@ -210,7 +211,7 @@ Every command accepts these flags:
 | `--json` | `boolean` | `false` | Output machine-readable JSON envelope |
 | `--quiet` | `boolean` | `false` | Suppress all output except errors |
 | `--no-color` | `boolean` | `false` | Disable ANSI color codes. Bare `--no-color` and `--no-color=1` both disable color; omit it to keep color enabled. |
-| `--test-mode` | `boolean` | `false` | Inject `test_mode: true` into API requests |
+| `--test-mode` | `boolean` | `false` | Inject `test_mode: true` into POST/PUT/PATCH request bodies |
 | `--debug` | `boolean` | `false` | Log HTTP requests/responses to stderr |
 | `--help, -h` | | | Show help for any command |
 | `--version` | | | Show CLI version |
@@ -284,7 +285,8 @@ sw skills install
 This will:
 1. Copy the bundled skills to the canonical `~/.agents/skills/` directory
 2. Auto-detect installed AI agents (Claude Code, Cursor, Copilot, etc.)
-3. Create symlinks from each agent's skill directory into the canonical location
+3. Create symlinks from each agent's skill directory into the canonical location when possible
+4. Keep existing installs unchanged unless `--force` is passed
 
 You can also target a specific agent:
 
@@ -462,9 +464,18 @@ sw me --json
 {
   "success": true,
   "data": {
-    "name": "John Doe",
-    "email": "john@example.com",
-    "plan": "Business"
+    "id": "user_abc123",
+    "role": "admin",
+    "user": {
+      "id": "user_abc123",
+      "name": "John Doe",
+      "email": "john@example.com"
+    },
+    "account": {
+      "id": "acct_xyz",
+      "name": "Acme Corp",
+      "plan_tier": "Business"
+    }
   },
   "error": null,
   "meta": {}
@@ -638,23 +649,21 @@ sw documents create \
 
 **API:** `POST /documents`
 
-**JSON output:**
+**JSON output (default - draft):**
 ```json
 {
   "success": true,
   "data": {
     "id": "doc_abc123",
     "name": "Service Agreement",
-    "status": "pending",
+    "status": "draft",
     "created_at": "2024-01-15T10:30:00Z",
     "recipients": [
       {
         "id": "rec_xyz",
         "email": "alice@example.com",
         "name": "Alice Smith",
-        "status": "pending",
-        "signing_url": "https://app.signwell.com/sign/...",
-        "embedded_signing_url": "https://app.signwell.com/embed/..."
+        "status": "pending"
       }
     ]
   },
@@ -662,6 +671,8 @@ sw documents create \
   "meta": {}
 }
 ```
+
+> **Note:** Documents are always created as drafts unless `--send` is also passed. Pass `--text-tags --send` to send immediately; the returned document will have `status: pending` and each recipient will include a `signing_url`.
 
 ---
 
@@ -689,7 +700,10 @@ List documents with pagination.
 ```bash
 sw documents list
 sw documents list --page 2 --per-page 50
+sw documents list --limit 30 --page 2
 sw documents list --status completed
+sw documents list --name small-contract --status completed
+sw documents list --query "name:Classic AND status:completed AND start_date:2026-01-31"
 sw documents list --all              # fetch all pages
 sw documents list --all --json       # NDJSON stream of all documents
 ```
@@ -697,11 +711,19 @@ sw documents list --all --json       # NDJSON stream of all documents
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `--page` | `number` | `1` | Page number |
-| `--per-page` | `number` | `20` | Items per page |
+| `--per-page` / `--limit` | `number` | `20` | Items per page, max `50` |
+| `--query` | `string` | | Raw API filter query, e.g. `name:Classic AND status:completed` |
+| `--name` | `string` | | Filter by document name |
 | `--status` | `string` | | Filter by document status. Common API statuses include `draft`, `saved`, `sent`, `shared`, `viewed`, `pending`, `completed`, `expired`, `canceled`, `declined`, `bounced`, and `error`. |
+| `--person` | `string` | | Filter by signer/person |
+| `--start-date` | `string` | | Filter documents created on or after `YYYY-MM-DD` |
+| `--end-date` | `string` | | Filter documents created on or before `YYYY-MM-DD` |
+| `--document-ids` | `string[]` | | Filter by document ID(s), comma-separated or repeated |
 | `--all` / `--all-pages` | `boolean` | `false` | Fetch all pages |
 
-**API:** `GET /documents?page={page}&per_page={per_page}&status={status}`
+**API:** `GET /documents?page={page}&limit={limit}&query={query}`
+
+All document list filters are serialized into `query=` and joined with ` AND `. Supported filter keys are `name`, `status`, `person`, `start_date`, `end_date`, and `document_ids`. Dates must use `YYYY-MM-DD`, and `OR` filters are not supported. `keyword` is not exposed because it is not a confirmed document list filter key.
 
 **JSON output (single page):**
 ```json
@@ -842,7 +864,10 @@ sw templates create \
 
 | Option | Type | Required | Description |
 |--------|------|----------|-------------|
-| `--file` | `string[]` | **yes** | Template file(s) |
+| `--file <path>` | `string[]` | one of file/file-url/file-b64 | Local file path(s) |
+| `--file-url <url>` | `string[]` | | Remote file URL(s) |
+| `--file-b64 <path>` | `string` | | Path to base64-encoded file |
+| `--file-b64-name <name>` | `string` | | Filename for base64 upload |
 | `--name` | `string` | **yes** | Template name |
 | `--placeholder` | `string[]` | | `"role_name:email:display_name"` |
 | `--text-tags` | `boolean` | | Enable text tag parsing |
@@ -991,7 +1016,6 @@ sw bulk-send create \
 | `--dry-run` | `boolean` | | Validate CSV without creating |
 | `--limit` | `number` | | Process only first N rows |
 | `--confirm` | `boolean` | | Skip confirmation prompt |
-| `--progress` | `boolean` | | Show progress bar |
 
 **API:** `POST /bulk_sends`
 
@@ -1234,40 +1258,14 @@ sw schema bulk-send.create
 | `bulk-send.create` | Create a bulk send |
 | `webhooks.create` | Create a webhook |
 
-**Output:**
-```json
-{
-  "command": "documents.create",
-  "description": "Create a new document for signing",
-  "input_schema": {
-    "type": "object",
-    "properties": {
-      "files": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "file_base64": { "type": "string" }, "file_url": { "type": "string" } }, "required": ["name"] } },
-      "recipients": { "type": "array", "items": { "type": "object", "properties": { "email": { "type": "string" }, "name": { "type": "string" }, "embedded_signing": { "type": "boolean" } }, "required": ["email"] } },
-      "name": { "type": "string" },
-      "subject": { "type": "string" },
-      "message": { "type": "string" },
-      "draft": { "type": "boolean" },
-      "text_tags": { "type": "boolean" },
-      "redirect_url": { "type": "string" },
-      "signing_order": { "type": "boolean" },
-      "expires_in": { "type": "number" },
-      "reminders": { "type": "array", "items": { "type": "number" } }
-    },
-    "required": ["files", "recipients"]
-  },
-  "output_schema": {
-    "type": "object",
-    "properties": {
-      "id": { "type": "string" },
-      "name": { "type": "string" },
-      "status": { "type": "string" },
-      "created_at": { "type": "string" },
-      "recipients": { "type": "array" }
-    }
-  }
-}
+**Output format:** Each response contains `command`, `description`, `input_schema`, and `output_schema` as JSON Schema objects derived from the live Zod definitions in `src/commands/schema.ts`. Run the command directly for the canonical, always-current output:
+
+```bash
+sw schema documents.create
+sw schema templates.use
 ```
+
+> **Note:** `sw schema` outputs raw JSON; it is not wrapped in the standard `--json` envelope.
 
 ---
 
@@ -1294,8 +1292,9 @@ sw skills install --json                 # machine-readable output
 **Behavior:**
 1. Copies skills to canonical `~/.agents/skills/` directory
 2. Detects installed AI agents on the system
-3. Creates symlinks from each agent's skills directory to the canonical location
+3. Creates symlinks from each agent's skills directory to the canonical location when possible
 4. Falls back to copying if symlinks are not supported (e.g., Windows without developer mode)
+5. Keeps existing installs unchanged unless `--force` is passed
 
 **JSON output:**
 ```json
@@ -1306,7 +1305,7 @@ sw skills install --json                 # machine-readable output
     "canonical_path": "/home/user/.agents/skills",
     "agents": [
       { "agent": "Claude Code", "skill": "signwell-cli", "method": "symlink" },
-      { "agent": "Cursor", "skill": "signwell-cli", "method": "symlink" }
+      { "agent": "Cursor", "skill": "signwell-cli", "method": "existing" }
     ]
   },
   "error": null,
@@ -1320,7 +1319,7 @@ sw skills install --json                 # machine-readable output
 
 ### Human Mode (default)
 
-Rich terminal output with colors, spinners, and ASCII tables.
+Rich terminal output with colors, spinners, and terminal tables.
 
 ```bash
 sw documents list
@@ -1357,7 +1356,10 @@ done
 
 ## JSON Envelope
 
-All `--json` output follows this envelope format:
+All `--json` output follows this envelope format, with two exceptions:
+
+- `sw schema <command>` outputs raw JSON (not envelope-wrapped).
+- `sw <command> --all --json` streams NDJSON (one raw data object per line, no envelope).
 
 ### Success
 
@@ -1470,7 +1472,7 @@ All `--json` output follows this envelope format:
 {
   id: string;
   name?: string;
-  status: "processing" | "completed" | "failed";
+  status: string;  // e.g. processing, completed, failed
   total: number;
   sent?: number;
   failed?: number;
@@ -1517,7 +1519,7 @@ All `--json` output follows this envelope format:
 
 All endpoints are relative to the base URL (default: `https://www.signwell.com/api/v1`).
 
-Authentication: `X-Api-Token` header.
+Authentication: `X-Api-Key` header.
 
 | Method | Endpoint | Command | Description |
 |--------|----------|---------|-------------|
@@ -1562,7 +1564,7 @@ Authentication: `X-Api-Token` header.
 | `500` | `SERVER_ERROR` | This is a SignWell server error. Try again later |
 | `503` | `SERVICE_UNAVAILABLE` | SignWell API is temporarily unavailable. Retrying automatically... |
 | network | `NETWORK_ERROR` | Check `SIGNWELL_API_BASE_URL` and your network connection |
-| other | `API_ERROR` | Check API docs or contact support |
+| other | `UNKNOWN_ERROR` | An unexpected error occurred |
 
 ### Exit Codes
 
@@ -1644,12 +1646,13 @@ At least one file source is required for `documents create` and `templates creat
 
 ## Pagination
 
-List commands support pagination via `--page` and `--per-page`.
+List commands support pagination via `--page` and `--per-page`. For documents, `--limit` is an alias for `--per-page` and maps to the API's `limit` parameter. Document list page size must be between 1 and 50.
 
 ### Single Page
 
 ```bash
 sw documents list --page 2 --per-page 50
+sw documents list --limit 30 --page 2
 ```
 
 ### All Pages
@@ -1664,6 +1667,14 @@ The paginator calls the API repeatedly, incrementing the page number until all i
 
 ---
 
+## Dependency Pinning & Security
+
+Runtime and development dependencies are pinned to exact versions in `package.json`; do not use semver ranges like `^` or `~`. `package-lock.json` pins the full resolved dependency tree for local and CI installs.
+
+Use `npm ci` for normal setup and CI. When intentionally upgrading a dependency, update the exact version and lockfile together, review the diff, and run `npm audit` before publishing or releasing. The `overrides` block pins targeted transitive dependencies when a security fix is needed before upstream packages have moved.
+
+---
+
 ## Development
 
 ### Setup
@@ -1671,7 +1682,7 @@ The paginator calls the API repeatedly, incrementing the page number until all i
 ```bash
 git clone https://github.com/ziptied/Signwell-cli.git
 cd Signwell-cli
-npm install
+npm ci
 ```
 
 ### Scripts
@@ -1681,8 +1692,7 @@ npm run build      # Build with tsup
 npm run dev        # Watch mode (rebuild on change)
 npm test           # Run tests with vitest
 npm run typecheck  # TypeScript type checking
-npm run lint       # ESLint
-npm run format     # Prettier
+npm run lint       # TypeScript type checking (alias for typecheck)
 ```
 
 ### Project Structure

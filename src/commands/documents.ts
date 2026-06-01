@@ -27,6 +27,115 @@ function parseRecipient(spec: string): { email: string; name?: string; embedded?
   return { email, name, embedded };
 }
 
+export interface DocumentListCliOptions {
+  page?: number;
+  perPage?: number;
+  limit?: number;
+  query?: string;
+  name?: string;
+  status?: string;
+  person?: string;
+  startDate?: string;
+  endDate?: string;
+  documentIds?: string | string[];
+}
+
+const DATE_FILTER_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const OR_FILTER_PATTERN = /(^|\s)OR(\s|$)/i;
+const DOCUMENT_LIST_MAX_LIMIT = 50;
+
+function normalizedString(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed || undefined;
+}
+
+function normalizeDateFilter(value: string | undefined, optionName: string): string | undefined {
+  const normalized = normalizedString(value);
+  if (normalized && !DATE_FILTER_PATTERN.test(normalized)) {
+    throw new UsageError(
+      `--${optionName} must use YYYY-MM-DD format`,
+      `Example: --${optionName} 2026-02-15`,
+    );
+  }
+  return normalized;
+}
+
+function normalizeRawQuery(value: string | undefined): string | undefined {
+  const normalized = normalizedString(value);
+  if (normalized && OR_FILTER_PATTERN.test(normalized)) {
+    throw new UsageError(
+      'OR is not supported in --query',
+      'Use AND between filters, for example: --query "name:Classic AND status:completed"',
+    );
+  }
+  return normalized;
+}
+
+function normalizeDocumentLimit(limit: number | undefined): number | undefined {
+  if (limit === undefined) return undefined;
+  if (!Number.isInteger(limit) || limit < 1 || limit > DOCUMENT_LIST_MAX_LIMIT) {
+    throw new UsageError(
+      '--limit/--per-page must be an integer between 1 and 50',
+      'Example: --limit 30 --page 2',
+    );
+  }
+  return limit;
+}
+
+function normalizeDocumentIds(value: string | string[] | undefined): string | undefined {
+  if (value === undefined) return undefined;
+
+  const values = Array.isArray(value) ? value : [value];
+  const ids = values
+    .flatMap((entry) => entry.split(','))
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+
+  return ids.length > 0 ? ids.join(',') : undefined;
+}
+
+function addQueryFilter(parts: string[], key: string, value: string | undefined): void {
+  const normalized = normalizedString(value);
+  if (normalized) {
+    parts.push(`${key}:${normalized}`);
+  }
+}
+
+export function buildDocumentListQuery(options: DocumentListCliOptions): string | undefined {
+  const parts: string[] = [];
+  const rawQuery = normalizeRawQuery(options.query);
+
+  if (rawQuery) parts.push(rawQuery);
+  addQueryFilter(parts, 'name', options.name);
+  addQueryFilter(parts, 'status', options.status);
+  addQueryFilter(parts, 'person', options.person);
+  addQueryFilter(parts, 'start_date', normalizeDateFilter(options.startDate, 'start-date'));
+  addQueryFilter(parts, 'end_date', normalizeDateFilter(options.endDate, 'end-date'));
+  addQueryFilter(parts, 'document_ids', normalizeDocumentIds(options.documentIds));
+
+  return parts.length > 0 ? parts.join(' AND ') : undefined;
+}
+
+export function buildDocumentListParams(options: DocumentListCliOptions): docsApi.DocumentListParams {
+  return {
+    page: options.page,
+    limit: normalizeDocumentLimit(options.limit ?? options.perPage),
+    query: buildDocumentListQuery(options),
+  };
+}
+
+export function buildDocumentListPageParams(
+  query: string | undefined,
+  page: number,
+  limit: number,
+): docsApi.DocumentListParams {
+  return {
+    page,
+    limit: normalizeDocumentLimit(limit),
+    query,
+  };
+}
+
 export function registerDocumentsCommand(yargs: Argv): Argv {
   return yargs.command('documents', 'Manage documents', (y) =>
     y
@@ -188,35 +297,39 @@ export function registerDocumentsCommand(yargs: Argv): Argv {
         (yy) =>
           yy
             .option('page', { type: 'number', default: 1 })
-            .option('per-page', { type: 'number', default: 20 })
+            .option('per-page', { type: 'number', default: 20, alias: 'limit', describe: 'Items per page' })
+            .option('query', { type: 'string', describe: 'Raw API filter query, e.g. "name:Classic AND status:completed"' })
+            .option('name', { type: 'string', describe: 'Filter by document name' })
             .option('status', { type: 'string', describe: 'Filter by status' })
+            .option('person', { type: 'string', describe: 'Filter by signer/person' })
+            .option('start-date', { type: 'string', describe: 'Filter created_at from date (YYYY-MM-DD)' })
+            .option('end-date', { type: 'string', describe: 'Filter created_at through date (YYYY-MM-DD)' })
+            .option('document-ids', { type: 'string', array: true, describe: 'Filter by document ID(s), comma-separated or repeated' })
             .option('all', { type: 'boolean', describe: 'Fetch all pages' })
             .option('all-pages', { type: 'boolean', describe: 'Alias for --all' }),
         async (argv) => {
           setOutputMode({ json: argv.json as boolean, quiet: argv.quiet as boolean });
           try {
+            const fetchAll = argv.all || argv.allPages;
+            const listParams = buildDocumentListParams(argv);
+            const listQuery = listParams.query;
+
             createApiClient({
               profile: argv.profile as string,
               testMode: argv.testMode as boolean,
               debug: argv.debug as boolean,
             });
 
-            const fetchAll = argv.all || argv.allPages;
-
             if (fetchAll) {
               const spin = spinner('Fetching all documents...');
 
               const fetcher = (page: number, perPage: number) =>
-                docsApi.listDocuments({
-                  page,
-                  per_page: perPage,
-                  status: argv.status as string | undefined,
-                });
+                docsApi.listDocuments(buildDocumentListPageParams(listQuery, page, perPage));
 
               const items: unknown[] = [];
 
               for await (const doc of paginate(fetcher, {
-                perPage: 100,
+                perPage: DOCUMENT_LIST_MAX_LIMIT,
                 onPage: (current, total) => {
                   spin.text = `Fetching page ${current} of ${total}...`;
                 },
@@ -247,11 +360,7 @@ export function registerDocumentsCommand(yargs: Argv): Argv {
             }
 
             const spin = spinner('Fetching documents...');
-            const result = await docsApi.listDocuments({
-              page: argv.page,
-              per_page: argv.perPage,
-              status: argv.status as string | undefined,
-            });
+            const result = await docsApi.listDocuments(listParams);
             spin.succeed('Documents retrieved');
 
             if (isJsonMode()) {

@@ -72,7 +72,7 @@ const cli = yargs(hideBin(process.argv))
   })
   .option('test-mode', {
     type: 'boolean',
-    describe: 'Set test_mode: true on API requests',
+    describe: 'Set test_mode: true on POST/PUT/PATCH request bodies',
     default: false,
     global: true,
   })
