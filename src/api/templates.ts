@@ -1,6 +1,6 @@
 import { getClient, type ApiClientOptions } from './client.js';
 import type { Template, PaginatedResponse, DocumentFile } from '../types/api.js';
-import { normalizePaginatedResponse, normalizePaginationParams, type PaginationParams } from '../lib/pagination.js';
+import { normalizePaginatedResponse, type PaginationParams } from '../lib/pagination.js';
 
 export interface CreateTemplatePayload {
   name: string;
@@ -14,6 +14,10 @@ export interface CreateTemplatePayload {
     email?: string;
   }>;
   fields?: unknown[];
+}
+
+export interface TemplateListParams extends PaginationParams {
+  query?: string;
 }
 
 export async function createTemplate(
@@ -39,11 +43,16 @@ export async function getTemplate(id: string, options: ApiClientOptions = {}): P
 }
 
 export async function listTemplates(
-  params: PaginationParams = {},
+  params: TemplateListParams = {},
   options: ApiClientOptions = {},
 ): Promise<PaginatedResponse<Template>> {
   const client = getClient(options);
-  const apiParams = normalizePaginationParams(params);
+  const pageSize = params.limit ?? params.per_page;
+  const apiParams = {
+    ...(params.page !== undefined ? { page: params.page } : {}),
+    ...(pageSize !== undefined ? { per_page: pageSize } : {}),
+    ...(params.query !== undefined ? { query: params.query } : {}),
+  };
   const { data } = await client.get('/document_templates', { params: apiParams });
   return normalizePaginatedResponse<Template>(data, ['templates', 'document_templates'], apiParams);
 }

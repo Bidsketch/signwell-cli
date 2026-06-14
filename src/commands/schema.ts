@@ -147,11 +147,26 @@ const schemas: Record<string, { description: string; input: z.ZodType; output: z
     input: z.object({
       page: z.number().optional(),
       per_page: z.number().optional(),
+      limit: z.number().optional(),
+      query: z.string().optional(),
+      name: z.string().optional(),
+      status: z.string().optional(),
+      start_date: z.string().optional(),
+      end_date: z.string().optional(),
+      template_ids: z.array(z.string()).optional(),
     }),
     output: z.object({
       success: z.boolean(),
       data: z.array(z.object({ id: z.string(), name: z.string(), created_at: z.string() })),
-      meta: z.object({ count: z.number(), total: z.number(), page: z.number() }),
+      meta: z.object({
+        count: z.number(),
+        total: z.number(),
+        page: z.number(),
+        per_page: z.number(),
+        total_pages: z.number(),
+        next_page: z.number().nullable().optional(),
+        prev_page: z.number().nullable().optional(),
+      }),
     }),
   },
   'templates.use': {

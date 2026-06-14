@@ -141,6 +141,9 @@ sw templates get <template-id> --json
 
 # List templates
 sw templates list --json
+sw templates list --page 2 --per-page 50 --json
+sw templates list --limit 30 --page 2 --json
+sw templates list --query "name:Classic AND status:Available" --json
 sw templates list --all --json
 
 # Update a template

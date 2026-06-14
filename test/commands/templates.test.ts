@@ -3,6 +3,8 @@ import nock from 'nock';
 import { createApiClient, resetClient } from '../../src/api/client.js';
 import { getTemplate, listTemplates, deleteTemplate } from '../../src/api/templates.js';
 import { createDocumentFromTemplate, sendDocument } from '../../src/api/documents.js';
+import { buildTemplateListPageParams, buildTemplateListParams, buildTemplateListQuery } from '../../src/commands/templates.js';
+import { UsageError } from '../../src/lib/errors.js';
 import templateFixture from '../fixtures/template.json';
 import documentFixture from '../fixtures/document.json';
 import templatesListFixture from '../fixtures/templates-list.json';
@@ -52,6 +54,109 @@ describe('templates API', () => {
 
     const result = await listTemplates({ page: 1, limit: 100 });
     expect(result.per_page).toBe(100);
+  });
+
+  it('passes raw query filters to the templates API', async () => {
+    const query = 'name:Classic AND status:Available AND start_date:2026-01-31';
+
+    nock(BASE_URL)
+      .get('/document_templates')
+      .query({ page: 2, per_page: 30, query })
+      .reply(200, templatesListFixture);
+
+    const result = await listTemplates({ page: 2, per_page: 30, query });
+    expect(result.per_page).toBe(30);
+  });
+
+  it('sends only supported top-level template list params', async () => {
+    const query = 'status:Available';
+
+    nock(BASE_URL)
+      .get('/document_templates')
+      .query((params) => {
+        expect(params).toEqual({ page: '2', per_page: '30', query });
+        return true;
+      })
+      .reply(200, templatesListFixture);
+
+    const result = await listTemplates({
+      page: 2,
+      limit: 30,
+      per_page: 50,
+      query,
+      status: 'Available',
+    } as any);
+    expect(result.per_page).toBe(30);
+  });
+
+  it('builds status filters into template query syntax', () => {
+    expect(buildTemplateListQuery({ status: 'Available' })).toBe('status:Available');
+  });
+
+  it('builds raw and named template filters into query syntax', () => {
+    expect(buildTemplateListQuery({
+      query: 'name:Classic',
+      name: 'standard-nda',
+      status: 'Available',
+      startDate: '2026-02-01',
+      endDate: '2026-02-28',
+      templateIds: ['tmpl_1,tmpl_2', 'tmpl_3'],
+    })).toBe(
+      'name:Classic AND name:standard-nda AND status:Available AND start_date:2026-02-01 AND end_date:2026-02-28 AND template_ids:tmpl_1,tmpl_2,tmpl_3',
+    );
+  });
+
+  it('builds template filters from snake_case option aliases', () => {
+    expect(buildTemplateListQuery({
+      start_date: '2026-02-01',
+      end_date: '2026-02-28',
+      template_ids: ['tmpl_1', 'tmpl_2'],
+    })).toBe('start_date:2026-02-01 AND end_date:2026-02-28 AND template_ids:tmpl_1,tmpl_2');
+  });
+
+  it('builds template list params from CLI pagination aliases and filters', () => {
+    expect(buildTemplateListParams({
+      page: 2,
+      perPage: 50,
+      status: 'Available',
+    })).toEqual({
+      page: 2,
+      per_page: 50,
+      query: 'status:Available',
+    });
+  });
+
+  it('prefers limit over per-page aliases for templates', () => {
+    expect(buildTemplateListParams({
+      page: 2,
+      limit: 30,
+      perPage: 50,
+      per_page: 40,
+    })).toEqual({
+      page: 2,
+      per_page: 30,
+      query: undefined,
+    });
+  });
+
+  it('builds all-page template list params with the current query and page size', () => {
+    expect(buildTemplateListPageParams('name:Codex AND status:Available', 3, 100)).toEqual({
+      page: 3,
+      per_page: 100,
+      query: 'name:Codex AND status:Available',
+    });
+  });
+
+  it('rejects invalid template date filters', () => {
+    expect(() => buildTemplateListQuery({ startDate: '02/15/2026' })).toThrow(UsageError);
+  });
+
+  it('rejects raw OR filters for templates', () => {
+    expect(() => buildTemplateListQuery({ query: 'name:Codex OR status:Available' })).toThrow(UsageError);
+  });
+
+  it('rejects invalid template list limits', () => {
+    expect(() => buildTemplateListParams({ limit: 0 })).toThrow(UsageError);
   });
 
   it('deletes a template', async () => {

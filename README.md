@@ -240,23 +240,23 @@ Stored at `~/.signwell/config.json`:
 }
 ```
 
-### Environment Variable Overrides
+### Environment Variables
 
-Environment variables take precedence over config file values:
+Stored CLI profiles are the credential source for normal account-scoped commands. `SIGNWELL_API_KEY` is ignored by normal commands, including after `sw auth logout`; configure credentials with `sw auth login` or `sw profile add`.
 
 | Variable | Description |
 |----------|-------------|
-| `SIGNWELL_API_KEY` | Override the API key (highest priority) |
+| `SIGNWELL_API_KEY` | Ignored for normal commands; use `sw auth login --api-key` to store credentials in a profile |
 | `SIGNWELL_TEST_MODE` | Set to `"true"` to enable test mode |
 | `SIGNWELL_API_BASE_URL` | Custom API base URL (default: `https://www.signwell.com/api/v1`) |
 | `SIGNWELL_CONFIG_PATH` | Custom config file location |
 | `SIGNWELL_AUTO_CONFIRM` | Set to `"true"` to skip all confirmation prompts |
 
-### Priority Order
+### Credential Priority
 
-1. `--api-key` flag (auth commands only)
-2. `SIGNWELL_API_KEY` environment variable
-3. Config file profile (`--profile <name>` or active profile)
+1. Explicit `--api-key` flag for auth setup commands.
+2. Config file profile selected by `--profile <name>` or the active profile.
+3. No implicit environment-variable credential fallback.
 
 ---
 
@@ -404,6 +404,8 @@ sw auth logout
 sw auth logout --profile staging
 ```
 
+After the selected profile is removed, normal API commands are unauthenticated until another profile is configured. `SIGNWELL_API_KEY` does not act as a fallback credential.
+
 **Options:**
 
 | Option | Type | Description |
@@ -438,8 +440,12 @@ sw auth status --profile production
   "data": {
     "authenticated": true,
     "profile": "default",
+    "credential_source": "profile",
     "api_key": "sk_l...c123",
-    "test_mode": false
+    "test_mode": false,
+    "env_api_key_set": true,
+    "env_api_key_conflict": false,
+    "env_api_key_ignored": false
   },
   "error": null,
   "meta": {}
@@ -898,16 +904,29 @@ sw templates get tmpl_abc123
 ```bash
 sw templates list
 sw templates list --page 2 --per-page 50
+sw templates list --limit 30 --page 2
+sw templates list --status Available
+sw templates list --name nda --status Available
+sw templates list --query "name:Classic AND status:Available AND start_date:2026-01-31"
 sw templates list --all
+sw templates list --all --json       # NDJSON stream of all templates
 ```
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `--page` | `number` | `1` | Page number |
-| `--per-page` | `number` | `20` | Items per page |
+| `--per-page` / `--limit` | `number` | `20` | Items per page |
+| `--query` | `string` | | Raw API filter query, e.g. `name:Classic AND status:Available` |
+| `--name` | `string` | | Filter by template name |
+| `--status` | `string` | | Filter by template status |
+| `--start-date` | `string` | | Filter templates created on or after `YYYY-MM-DD` |
+| `--end-date` | `string` | | Filter templates created on or before `YYYY-MM-DD` |
+| `--template-ids` | `string[]` | | Filter by template ID(s), comma-separated or repeated |
 | `--all` / `--all-pages` | `boolean` | `false` | Fetch all pages |
 
-**API:** `GET /document_templates?page={page}&per_page={per_page}`
+**API:** `GET /document_templates?page={page}&per_page={per_page}&query={query}`
+
+Template list filters are serialized into `query=` and joined with ` AND `. Supported CLI filter keys are `name`, `status`, `start_date`, `end_date`, and `template_ids`. Dates must use `YYYY-MM-DD`, and `OR` filters are not supported.
 
 **JSON output:** Paginated array of `Template` objects with meta.
 
@@ -1603,7 +1622,7 @@ Default: 3 retries. Rate limit warnings are displayed when fewer than 5 requests
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `SIGNWELL_API_KEY` | API key (overrides config) | — |
+| `SIGNWELL_API_KEY` | Ignored for normal commands; store credentials with `sw auth login` | — |
 | `SIGNWELL_TEST_MODE` | `"true"` to enable test mode | `false` |
 | `SIGNWELL_API_BASE_URL` | Custom API endpoint | `https://www.signwell.com/api/v1` |
 | `SIGNWELL_CONFIG_PATH` | Custom config file path | `~/.signwell/config.json` |
@@ -1646,13 +1665,15 @@ At least one file source is required for `documents create` and `templates creat
 
 ## Pagination
 
-List commands support pagination via `--page` and `--per-page`. For documents, `--limit` is an alias for `--per-page` and maps to the API's `limit` parameter. Document list page size must be between 1 and 50.
+List commands support pagination via `--page` and `--per-page`. For documents and templates, `--limit` is an alias for `--per-page`. Document list page size must be between 1 and 50.
 
 ### Single Page
 
 ```bash
 sw documents list --page 2 --per-page 50
 sw documents list --limit 30 --page 2
+sw templates list --page 2 --per-page 50
+sw templates list --limit 30 --page 2
 ```
 
 ### All Pages

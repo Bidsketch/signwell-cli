@@ -1,6 +1,9 @@
 import axios, { type AxiosInstance, type AxiosError, type InternalAxiosRequestConfig } from 'axios';
 import axiosRetry from 'axios-retry';
-import { getApiKey, getBaseUrl, getTestMode } from '../lib/config.js';
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { getApiKey, getBaseUrl, getEnvApiKeyStatus, getTestMode } from '../lib/config.js';
 import { mapAxiosError, getExitCode, AuthError } from '../lib/errors.js';
 import { printErrorJson, printError, printWarning, isJsonMode } from '../lib/output.js';
 
@@ -18,10 +21,37 @@ let clientInstance: AxiosInstance | null = null;
 let clientTestMode = false;
 let clientDebug = false;
 
+function getPackageVersion(): string {
+  const currentDir = dirname(fileURLToPath(import.meta.url));
+  for (const relativePath of ['../package.json', '../../package.json']) {
+    try {
+      const packageJson = JSON.parse(readFileSync(resolve(currentDir, relativePath), 'utf-8')) as {
+        version?: unknown;
+      };
+      if (typeof packageJson.version === 'string' && packageJson.version.length > 0) {
+        return packageJson.version;
+      }
+    } catch {
+      // The source and bundled CLI resolve package.json from different depths.
+    }
+  }
+  return '0.0.0';
+}
+
+export const SIGNWELL_USER_AGENT = `signwell-cli/${getPackageVersion()}`;
+
 export function createApiClient(options: ApiClientOptions = {}): AxiosInstance {
-  const apiKey = options.apiKey || getApiKey(options.profile);
+  const hasExplicitApiKey = !!options.apiKey;
+  if (!hasExplicitApiKey) {
+    const envStatus = getEnvApiKeyStatus(options.profile);
+    if (envStatus.warning) {
+      printWarning(envStatus.warning.message, envStatus.warning.code);
+    }
+  }
+
+  const apiKey = hasExplicitApiKey ? options.apiKey : getApiKey(options.profile);
   if (!apiKey) {
-    throw new AuthError('No API key configured. Run `sw auth login` or set SIGNWELL_API_KEY');
+    throw new AuthError('No API key configured for the selected profile.');
   }
 
   const baseURL = options.baseUrl || getBaseUrl();
@@ -37,6 +67,7 @@ export function createApiClient(options: ApiClientOptions = {}): AxiosInstance {
     headers: {
       'X-Api-Key': apiKey,
       'Content-Type': 'application/json',
+      'User-Agent': SIGNWELL_USER_AGENT,
     },
   });
 

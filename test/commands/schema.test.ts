@@ -72,4 +72,20 @@ describe('schema command', () => {
     expect(properties.end_date.type).toBe('string');
     expect(properties.document_ids.type).toBe('array');
   });
+
+  it('exposes template list pagination and filter inputs', () => {
+    runSchemaCommand(['schema', 'templates.list', '--json']);
+
+    const output = stdoutSpy.mock.calls.map(([chunk]: [unknown]) => String(chunk)).join('');
+    const schema = JSON.parse(output);
+    const properties = schema.input_schema.properties;
+
+    expect(properties.limit.type).toBe('number');
+    expect(properties.query.type).toBe('string');
+    expect(properties.name.type).toBe('string');
+    expect(properties.status.type).toBe('string');
+    expect(properties.start_date.type).toBe('string');
+    expect(properties.end_date.type).toBe('string');
+    expect(properties.template_ids.type).toBe('array');
+  });
 });
