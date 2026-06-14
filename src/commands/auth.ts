@@ -5,9 +5,9 @@ import {
   readConfig,
   saveProfile,
   removeProfile,
-  getActiveProfile,
   maskApiKey,
   getTestMode,
+  getEnvApiKeyStatus,
 } from '../lib/config.js';
 import {
   setOutputMode,
@@ -15,6 +15,7 @@ import {
   printSuccess,
   printError,
   printInfo,
+  printWarning,
   spinner,
   isJsonMode,
   handleOutputError,
@@ -118,11 +119,23 @@ export function registerAuthCommand(yargs: Argv): Argv {
           try {
             const config = readConfig();
             const profileName = (argv.profile as string) || config.active_profile || 'default';
-            const profile = getActiveProfile(profileName);
+            const envStatus = getEnvApiKeyStatus(profileName);
+            const profile = envStatus.profile;
+
+            if (envStatus.warning) {
+              printWarning(envStatus.warning.message, envStatus.warning.code);
+            }
 
             if (!profile) {
               if (isJsonMode()) {
-                printJson({ authenticated: false, profile: profileName });
+                printJson({
+                  authenticated: false,
+                  profile: profileName,
+                  credential_source: null,
+                  env_api_key_set: envStatus.envApiKeySet,
+                  env_api_key_conflict: envStatus.envApiKeyConflict,
+                  env_api_key_ignored: envStatus.envApiKeyIgnored,
+                });
               } else {
                 printError('Not authenticated. Run `sw auth login`');
               }
@@ -136,11 +149,16 @@ export function registerAuthCommand(yargs: Argv): Argv {
               printJson({
                 authenticated: true,
                 profile: profileName,
+                credential_source: 'profile',
                 api_key: masked,
                 test_mode: testMode,
+                env_api_key_set: envStatus.envApiKeySet,
+                env_api_key_conflict: envStatus.envApiKeyConflict,
+                env_api_key_ignored: envStatus.envApiKeyIgnored,
               });
             } else {
               printInfo(`Profile: ${profileName}`);
+              printInfo('Credential Source: profile');
               printInfo(`API Key: ${masked}`);
               printInfo(`Test Mode: ${testMode ? 'enabled' : 'disabled'}`);
             }

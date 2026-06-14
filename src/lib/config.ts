@@ -2,6 +2,20 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { Config, ApiProfile } from '../types/api.js';
 
+export interface CredentialWarning {
+  code: string;
+  message: string;
+}
+
+export interface EnvApiKeyStatus {
+  envApiKeySet: boolean;
+  envApiKeyConflict: boolean;
+  envApiKeyIgnored: boolean;
+  profileName: string;
+  profile: ApiProfile | null;
+  warning: CredentialWarning | null;
+}
+
 function getConfigPath(): string {
   if (process.env.SIGNWELL_CONFIG_PATH) {
     return process.env.SIGNWELL_CONFIG_PATH;
@@ -37,26 +51,56 @@ export function writeConfig(config: Config): void {
   fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
 }
 
-export function getActiveProfile(profileName?: string): ApiProfile | null {
-  // Env var override
-  if (process.env.SIGNWELL_API_KEY) {
-    return {
-      api_key: process.env.SIGNWELL_API_KEY,
-      test_mode: process.env.SIGNWELL_TEST_MODE === 'true',
-    };
-  }
-
+function getConfiguredProfile(profileName?: string): { name: string; profile: ApiProfile | null } {
   const config = readConfig();
   const name = profileName || config.active_profile || 'default';
-  return config.profiles[name] || null;
+  return { name, profile: config.profiles[name] || null };
+}
+
+export function getActiveProfile(profileName?: string): ApiProfile | null {
+  return getConfiguredProfile(profileName).profile;
 }
 
 export function getApiKey(profileName?: string): string | null {
-  if (process.env.SIGNWELL_API_KEY) {
-    return process.env.SIGNWELL_API_KEY;
-  }
   const profile = getActiveProfile(profileName);
   return profile?.api_key || null;
+}
+
+export function getEnvApiKeyStatus(profileName?: string): EnvApiKeyStatus {
+  const { name, profile } = getConfiguredProfile(profileName);
+  const envApiKey = process.env.SIGNWELL_API_KEY;
+  const envApiKeySet = !!envApiKey;
+  let envApiKeyConflict = false;
+  let envApiKeyIgnored = false;
+  let warning: CredentialWarning | null = null;
+
+  if (envApiKeySet) {
+    if (profile) {
+      envApiKeyConflict = profile.api_key !== envApiKey;
+      envApiKeyIgnored = envApiKeyConflict;
+      if (envApiKeyConflict) {
+        warning = {
+          code: 'SIGNWELL_API_KEY_IGNORED',
+          message: `SIGNWELL_API_KEY is set but ignored; using credentials from profile "${name}".`,
+        };
+      }
+    } else {
+      envApiKeyIgnored = true;
+      warning = {
+        code: 'SIGNWELL_API_KEY_IGNORED',
+        message: `SIGNWELL_API_KEY is set but ignored because profile "${name}" is not configured. Run \`sw auth login\` to authenticate.`,
+      };
+    }
+  }
+
+  return {
+    envApiKeySet,
+    envApiKeyConflict,
+    envApiKeyIgnored,
+    profileName: name,
+    profile,
+    warning,
+  };
 }
 
 export function getTestMode(profileName?: string, flagTestMode?: boolean): boolean {

@@ -20,6 +20,117 @@ import {
   handleOutputError,
 } from '../lib/output.js';
 
+export interface TemplateListCliOptions {
+  page?: number;
+  perPage?: number;
+  per_page?: number;
+  limit?: number;
+  query?: string;
+  name?: string;
+  status?: string;
+  startDate?: string;
+  start_date?: string;
+  endDate?: string;
+  end_date?: string;
+  templateIds?: string | string[];
+  template_ids?: string | string[];
+}
+
+const DATE_FILTER_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const OR_FILTER_PATTERN = /(^|\s)OR(\s|$)/i;
+const TEMPLATE_LIST_ALL_PAGE_SIZE = 100;
+
+function normalizedString(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed || undefined;
+}
+
+function normalizeDateFilter(value: string | undefined, optionName: string): string | undefined {
+  const normalized = normalizedString(value);
+  if (normalized && !DATE_FILTER_PATTERN.test(normalized)) {
+    throw new UsageError(
+      `--${optionName} must use YYYY-MM-DD format`,
+      `Example: --${optionName} 2026-02-15`,
+    );
+  }
+  return normalized;
+}
+
+function normalizeRawQuery(value: string | undefined): string | undefined {
+  const normalized = normalizedString(value);
+  if (normalized && OR_FILTER_PATTERN.test(normalized)) {
+    throw new UsageError(
+      'OR is not supported in --query',
+      'Use AND between filters, for example: --query "name:Classic AND status:Available"',
+    );
+  }
+  return normalized;
+}
+
+function normalizeTemplateLimit(limit: number | undefined): number | undefined {
+  if (limit === undefined) return undefined;
+  if (!Number.isInteger(limit) || limit < 1) {
+    throw new UsageError(
+      '--limit/--per-page must be a positive integer',
+      'Example: --limit 30 --page 2',
+    );
+  }
+  return limit;
+}
+
+function normalizeTemplateIds(value: string | string[] | undefined): string | undefined {
+  if (value === undefined) return undefined;
+
+  const values = Array.isArray(value) ? value : [value];
+  const ids = values
+    .flatMap((entry) => entry.split(','))
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+
+  return ids.length > 0 ? ids.join(',') : undefined;
+}
+
+function addQueryFilter(parts: string[], key: string, value: string | undefined): void {
+  const normalized = normalizedString(value);
+  if (normalized) {
+    parts.push(`${key}:${normalized}`);
+  }
+}
+
+export function buildTemplateListQuery(options: TemplateListCliOptions): string | undefined {
+  const parts: string[] = [];
+  const rawQuery = normalizeRawQuery(options.query);
+
+  if (rawQuery) parts.push(rawQuery);
+  addQueryFilter(parts, 'name', options.name);
+  addQueryFilter(parts, 'status', options.status);
+  addQueryFilter(parts, 'start_date', normalizeDateFilter(options.startDate ?? options.start_date, 'start-date'));
+  addQueryFilter(parts, 'end_date', normalizeDateFilter(options.endDate ?? options.end_date, 'end-date'));
+  addQueryFilter(parts, 'template_ids', normalizeTemplateIds(options.templateIds ?? options.template_ids));
+
+  return parts.length > 0 ? parts.join(' AND ') : undefined;
+}
+
+export function buildTemplateListParams(options: TemplateListCliOptions): templatesApi.TemplateListParams {
+  return {
+    page: options.page,
+    per_page: normalizeTemplateLimit(options.limit ?? options.perPage ?? options.per_page),
+    query: buildTemplateListQuery(options),
+  };
+}
+
+export function buildTemplateListPageParams(
+  query: string | undefined,
+  page: number,
+  perPage: number,
+): templatesApi.TemplateListParams {
+  return {
+    page,
+    per_page: normalizeTemplateLimit(perPage),
+    query,
+  };
+}
+
 export function registerTemplatesCommand(yargs: Argv): Argv {
   return yargs.command('templates', 'Manage templates', (y) =>
     y
@@ -133,29 +244,37 @@ export function registerTemplatesCommand(yargs: Argv): Argv {
         (yy) =>
           yy
             .option('page', { type: 'number', default: 1 })
-            .option('per-page', { type: 'number', default: 20 })
+            .option('per-page', { type: 'number', default: 20, alias: ['limit', 'per_page'], describe: 'Items per page' })
+            .option('query', { type: 'string', describe: 'Raw API filter query, e.g. "name:Classic AND status:Available"' })
+            .option('name', { type: 'string', describe: 'Filter by template name' })
+            .option('status', { type: 'string', describe: 'Filter by template status' })
+            .option('start-date', { type: 'string', alias: 'start_date', describe: 'Filter templates created on or after YYYY-MM-DD' })
+            .option('end-date', { type: 'string', alias: 'end_date', describe: 'Filter templates created on or before YYYY-MM-DD' })
+            .option('template-ids', { type: 'string', array: true, alias: 'template_ids', describe: 'Filter by template ID(s), comma-separated or repeated' })
             .option('all', { type: 'boolean', describe: 'Fetch all pages' })
             .option('all-pages', { type: 'boolean', describe: 'Alias for --all' }),
         async (argv) => {
           setOutputMode({ json: argv.json as boolean, quiet: argv.quiet as boolean });
           try {
+            const fetchAll = argv.all || argv.allPages;
+            const listParams = buildTemplateListParams(argv);
+            const listQuery = listParams.query;
+
             createApiClient({
               profile: argv.profile as string,
               testMode: argv.testMode as boolean,
               debug: argv.debug as boolean,
             });
 
-            const fetchAll = argv.all || argv.allPages;
-
             if (fetchAll) {
               const spin = spinner('Fetching all templates...');
               const fetcher = (page: number, perPage: number) =>
-                templatesApi.listTemplates({ page, per_page: perPage });
+                templatesApi.listTemplates(buildTemplateListPageParams(listQuery, page, perPage));
 
               const items: unknown[] = [];
 
               for await (const tmpl of paginate(fetcher, {
-                perPage: 100,
+                perPage: TEMPLATE_LIST_ALL_PAGE_SIZE,
                 onPage: (current, total) => {
                   spin.text = `Fetching page ${current} of ${total}...`;
                 },
@@ -181,10 +300,7 @@ export function registerTemplatesCommand(yargs: Argv): Argv {
             }
 
             const spin = spinner('Fetching templates...');
-            const result = await templatesApi.listTemplates({
-              page: argv.page,
-              per_page: argv.perPage,
-            });
+            const result = await templatesApi.listTemplates(listParams);
             spin.succeed('Templates retrieved');
 
             if (isJsonMode()) {
@@ -194,6 +310,8 @@ export function registerTemplatesCommand(yargs: Argv): Argv {
                 page: result.page,
                 per_page: result.per_page,
                 total_pages: result.total_pages,
+                next_page: result.page < result.total_pages ? result.page + 1 : null,
+                prev_page: result.page > 1 ? result.page - 1 : null,
               });
             } else {
               printInfo(`Templates (page ${result.page} of ${result.total_pages} — ${result.total} total)`);
@@ -202,6 +320,12 @@ export function registerTemplatesCommand(yargs: Argv): Argv {
                 table.push([tmpl.id, tmpl.name || '-', formatDate(tmpl.created_at)]);
               }
               printInfo(table.toString());
+
+              const nav: string[] = [];
+              if (result.page > 1) nav.push('← prev');
+              nav.push(`page ${result.page}/${result.total_pages}`);
+              if (result.page < result.total_pages) nav.push('next →');
+              printInfo(nav.join('  ') + '   (use --page N to jump)');
             }
           } catch (err) {
             handleOutputError(err);

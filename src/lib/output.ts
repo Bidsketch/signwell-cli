@@ -10,6 +10,34 @@ let quietMode = false;
 let colorDisabled = process.env.NO_COLOR !== undefined;
 const defaultChalkLevel = chalk.level;
 
+export interface OutputWarning {
+  code: string;
+  message: string;
+}
+
+let pendingWarnings: OutputWarning[] = [];
+
+export function clearWarnings(): void {
+  pendingWarnings = [];
+}
+
+function withPendingWarnings(meta: Record<string, unknown>): Record<string, unknown> {
+  if (pendingWarnings.length === 0) {
+    return meta;
+  }
+
+  const warnings = pendingWarnings;
+  pendingWarnings = [];
+  const existingWarnings = Array.isArray(meta.warnings)
+    ? meta.warnings as OutputWarning[]
+    : [];
+
+  return {
+    ...meta,
+    warnings: [...existingWarnings, ...warnings],
+  };
+}
+
 export function setOutputMode(options: { json?: boolean; quiet?: boolean; noColor?: boolean }): void {
   if (options.json !== undefined) {
     jsonMode = !!options.json;
@@ -39,7 +67,7 @@ export function printJson<T>(data: T, meta: Record<string, unknown> = {}): void 
     success: true,
     error: null,
     data,
-    meta,
+    meta: withPendingWarnings(meta),
   };
   process.stdout.write(JSON.stringify(envelope, null, 2) + '\n');
 }
@@ -53,7 +81,7 @@ export function printErrorJson(error: ApiError): void {
     success: false,
     error,
     data: null,
-    meta: {},
+    meta: withPendingWarnings({}),
   };
   process.stderr.write(JSON.stringify(envelope, null, 2) + '\n');
 }
@@ -64,9 +92,12 @@ export function printSuccess(message: string): void {
   console.log(chalk.green('✓') + ' ' + message);
 }
 
-export function printWarning(message: string): void {
+export function printWarning(message: string, code = 'WARNING'): void {
+  if (jsonMode) {
+    pendingWarnings.push({ code, message });
+    return;
+  }
   if (quietMode) return;
-  if (jsonMode) return;
   console.log(chalk.yellow('⚠') + ' ' + message);
 }
 

@@ -10,6 +10,7 @@ import {
   setActiveProfile,
   getActiveProfile,
   getApiKey,
+  getEnvApiKeyStatus,
   getTestMode,
   getBaseUrl,
   maskApiKey,
@@ -29,6 +30,9 @@ beforeEach(() => {
 afterEach(() => {
   fs.rmSync(tmpDir, { recursive: true, force: true });
   delete process.env.SIGNWELL_CONFIG_PATH;
+  delete process.env.SIGNWELL_API_KEY;
+  delete process.env.SIGNWELL_TEST_MODE;
+  delete process.env.SIGNWELL_API_BASE_URL;
 });
 
 describe('config', () => {
@@ -93,10 +97,17 @@ describe('config', () => {
     expect(switched).toBe(false);
   });
 
-  it('env var overrides config for API key', () => {
+  it('uses the configured profile API key when SIGNWELL_API_KEY differs', () => {
     saveProfile('default', { api_key: 'config-key', test_mode: false });
     process.env.SIGNWELL_API_KEY = 'env-key';
-    expect(getApiKey()).toBe('env-key');
+    expect(getActiveProfile()).toEqual({ api_key: 'config-key', test_mode: false });
+    expect(getApiKey()).toBe('config-key');
+
+    const status = getEnvApiKeyStatus();
+    expect(status.envApiKeySet).toBe(true);
+    expect(status.envApiKeyConflict).toBe(true);
+    expect(status.envApiKeyIgnored).toBe(true);
+    expect(status.warning?.code).toBe('SIGNWELL_API_KEY_IGNORED');
   });
 
   it('getApiKey returns from config when env not set', () => {
@@ -104,7 +115,41 @@ describe('config', () => {
     expect(getApiKey()).toBe('config-key');
   });
 
+  it('does not warn when SIGNWELL_API_KEY matches the configured profile key', () => {
+    saveProfile('default', { api_key: 'config-key', test_mode: false });
+    process.env.SIGNWELL_API_KEY = 'config-key';
+
+    const status = getEnvApiKeyStatus();
+    expect(status.envApiKeySet).toBe(true);
+    expect(status.envApiKeyConflict).toBe(false);
+    expect(status.envApiKeyIgnored).toBe(false);
+    expect(status.warning).toBeNull();
+  });
+
   it('getApiKey returns null when no config and no env', () => {
+    expect(getApiKey()).toBeNull();
+  });
+
+  it('ignores SIGNWELL_API_KEY when no profile is configured', () => {
+    process.env.SIGNWELL_API_KEY = 'env-key';
+
+    expect(getActiveProfile()).toBeNull();
+    expect(getApiKey()).toBeNull();
+
+    const status = getEnvApiKeyStatus();
+    expect(status.profileName).toBe('default');
+    expect(status.profile).toBeNull();
+    expect(status.envApiKeySet).toBe(true);
+    expect(status.envApiKeyConflict).toBe(false);
+    expect(status.envApiKeyIgnored).toBe(true);
+    expect(status.warning?.message).toContain('ignored');
+  });
+
+  it('does not fall back to SIGNWELL_API_KEY after removing the active profile', () => {
+    saveProfile('default', { api_key: 'config-key', test_mode: false });
+    process.env.SIGNWELL_API_KEY = 'env-key';
+
+    expect(removeProfile('default')).toBe(true);
     expect(getApiKey()).toBeNull();
   });
 
