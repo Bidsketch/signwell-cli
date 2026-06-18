@@ -271,7 +271,7 @@ signwell-cli ships with [Agent Skills](https://agentskills.io) — portable skil
 Use the [`skills`](https://skills.sh) CLI to install from GitHub. This auto-detects all supported agents on your machine:
 
 ```bash
-npx skills add ziptied/signwell-cli
+npx skills add Bidsketch/signwell-cli
 ```
 
 #### Option 2: Built-in command
@@ -1701,8 +1701,8 @@ Use `npm ci` for normal setup and CI. When intentionally upgrading a dependency,
 ### Setup
 
 ```bash
-git clone https://github.com/ziptied/Signwell-cli.git
-cd Signwell-cli
+git clone https://github.com/Bidsketch/signwell-cli.git
+cd signwell-cli
 npm ci
 ```
 

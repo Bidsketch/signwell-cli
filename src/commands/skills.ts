@@ -264,7 +264,7 @@ export function registerSkillsCommand(yargs: Argv): Argv {
                 }
                 if (targetAgents.length === 0) {
                   printInfo('No AI agents detected. Skills installed to canonical location only.');
-                  printInfo(`You can also install with: npx skills add ziptied/signwell-cli`);
+                  printInfo(`You can also install with: npx skills add Bidsketch/signwell-cli`);
                 }
               }
             } catch (err: unknown) {
