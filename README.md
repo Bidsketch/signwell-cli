@@ -37,11 +37,11 @@ A full-featured Node.js CLI for the [SignWell](https://www.signwell.com) eSignat
 
 ```bash
 # Install globally
-npm install -g signwell-cli
+npm install -g @signwell/cli
 
 # Or run directly without installing
-npx signwell-cli --help
-npx signwell-cli documents list
+npx @signwell/cli --help
+npx @signwell/cli documents list
 
 # Or from source
 git clone https://github.com/Bidsketch/signwell-cli.git
