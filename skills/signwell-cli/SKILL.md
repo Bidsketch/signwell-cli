@@ -2,7 +2,7 @@
 name: signwell-cli
 description: Use the SignWell CLI (`sw`) to manage eSignature documents, templates, bulk sends, and webhooks from the terminal. Trigger when the user wants to send documents for signing, manage templates, check document status, or interact with the SignWell API.
 metadata:
-  author: ziptied
+  author: SignWell
   version: "1.0.0"
 ---
 
