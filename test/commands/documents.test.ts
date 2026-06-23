@@ -152,6 +152,19 @@ describe('documents API', () => {
     });
   });
 
+  it('prefers limit over per-page aliases for documents', () => {
+    expect(buildDocumentListParams({
+      page: 2,
+      limit: 30,
+      perPage: 50,
+      per_page: 40,
+    })).toEqual({
+      page: 2,
+      limit: 30,
+      query: undefined,
+    });
+  });
+
   it('builds all-page list params with the current query and page size', () => {
     expect(buildDocumentListPageParams('name:Codex AND status:draft', 3, 50)).toEqual({
       page: 3,
