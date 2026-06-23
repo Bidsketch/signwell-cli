@@ -30,6 +30,7 @@ function parseRecipient(spec: string): { email: string; name?: string; embedded?
 export interface DocumentListCliOptions {
   page?: number;
   perPage?: number;
+  per_page?: number;
   limit?: number;
   query?: string;
   name?: string;
@@ -268,7 +269,7 @@ export function buildDocumentListQuery(options: DocumentListCliOptions): string 
 export function buildDocumentListParams(options: DocumentListCliOptions): docsApi.DocumentListParams {
   return {
     page: options.page,
-    limit: normalizeDocumentLimit(options.limit ?? options.perPage),
+    limit: normalizeDocumentLimit(options.limit ?? options.perPage ?? options.per_page),
     query: buildDocumentListQuery(options),
   };
 }
@@ -445,7 +446,7 @@ export function registerDocumentsCommand(yargs: Argv): Argv {
         (yy) =>
           yy
             .option('page', { type: 'number', default: 1 })
-            .option('per-page', { type: 'number', default: 20, alias: 'limit', describe: 'Items per page' })
+            .option('per-page', { type: 'number', default: 20, alias: ['limit', 'per_page'], describe: 'Items per page' })
             .option('query', { type: 'string', describe: 'Raw API filter query, e.g. "name:Classic AND status:completed"' })
             .option('name', { type: 'string', describe: 'Filter by document name' })
             .option('status', { type: 'string', describe: 'Filter by status' })
