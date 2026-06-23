@@ -114,7 +114,7 @@ export function buildTemplateListQuery(options: TemplateListCliOptions): string 
 export function buildTemplateListParams(options: TemplateListCliOptions): templatesApi.TemplateListParams {
   return {
     page: options.page,
-    per_page: normalizeTemplateLimit(options.limit ?? options.perPage ?? options.per_page),
+    limit: normalizeTemplateLimit(options.limit ?? options.perPage ?? options.per_page),
     query: buildTemplateListQuery(options),
   };
 }
@@ -126,7 +126,7 @@ export function buildTemplateListPageParams(
 ): templatesApi.TemplateListParams {
   return {
     page,
-    per_page: normalizeTemplateLimit(perPage),
+    limit: normalizeTemplateLimit(perPage),
     query,
   };
 }

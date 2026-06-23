@@ -607,6 +607,14 @@ sw documents create \
   --text-tags \
   --send
 
+# Send immediately with explicit coordinate fields
+sw documents create \
+  --file contract.pdf \
+  --recipient "alice@example.com:Alice Smith" \
+  --name "Coordinate Field Agreement" \
+  --fields fields.json \
+  --send
+
 # File from URL
 sw documents create \
   --file-url "https://example.com/contract.pdf" \
@@ -641,8 +649,9 @@ sw documents create \
 | `--subject` | `string` | | Email subject line |
 | `--message` | `string` | | Email message body |
 | `--draft` | `boolean` | | Create as draft (default behavior) |
-| `--send` | `boolean` | | Send after creation; requires `--text-tags` for file uploads |
+| `--send` | `boolean` | | Send on creation; requires `--text-tags` or `--fields` |
 | `--text-tags` | `boolean` | | Enable text tag parsing before sending |
+| `--fields` | `string` | | Path to document fields JSON file |
 | `--redirect-url` | `string` | | Redirect URL after signing |
 | `--signing-order` | `boolean` | | Enforce sequential signing order |
 | `--expiration-days` | `number` | | Days until document expires |
@@ -652,6 +661,42 @@ sw documents create \
 - `email` (required): Signer's email address
 - `name` (optional): Display name
 - `embedded` (optional): Use embedded signing (returns `embedded_signing_url`)
+
+**Document fields JSON:** `--fields` must point to a two-dimensional JSON array with one field array per uploaded file. A field array can be empty for files that do not need fields. Document fields use `recipient_id`; the first `--recipient` maps to `"1"`, the second to `"2"`, and so on.
+
+SignWell document field coordinates are pixel values for the field box on the target page: `x` is the left edge measured from the left side of the page, and `y` is the top edge measured from the top of the page. `width` and `height` are the field box dimensions in SignWell pixels.
+
+If you are deriving coordinates from a PDF drawing library such as ReportLab or pdf-lib, remember that PDF coordinates are usually points at 72 points per inch, while SignWell document fields use pixels. Convert PDF points to SignWell pixels with `96 / 72`, then convert the vertical origin.
+
+```text
+pointToSignWellPx = 96 / 72
+signwellX = pdfXFromLeftPt * pointToSignWellPx
+signwellY = (pdfPageHeightPt - pdfYFromBottomPt - fieldHeightPt) * pointToSignWellPx
+signwellWidth = fieldWidthPt * pointToSignWellPx
+signwellHeight = fieldHeightPt * pointToSignWellPx
+```
+
+Use `pdfPageHeightPt - pdfYFromBottomPt` only when the PDF coordinate already represents the desired top edge of the field box. If your source coordinates are already SignWell pixels, do not apply the PDF point scale.
+
+```json
+[
+  [
+    {
+      "x": 346.67,
+      "y": 549.33,
+      "page": 1,
+      "recipient_id": "1",
+      "type": "signature",
+      "required": true,
+      "api_id": "Signature_1",
+      "width": 293.33,
+      "height": 66.67
+    }
+  ]
+]
+```
+
+In that example, a US Letter PDF is 612 x 792 points, the visible signature line is drawn at PDF `y = 330` points from the bottom, and the signature field is 50 points tall. The top-origin PDF value is `792 - 330 - 50 = 412` points, then `412 * 96 / 72 = 549.33` SignWell pixels.
 
 **API:** `POST /documents`
 
@@ -678,7 +723,7 @@ sw documents create \
 }
 ```
 
-> **Note:** Documents are always created as drafts unless `--send` is also passed. Pass `--text-tags --send` to send immediately; the returned document will have `status: pending` and each recipient will include a `signing_url`.
+> **Note:** Documents are always created as drafts unless `--send` is also passed. Pass `--text-tags --send` or `--fields fields.json --send` to send immediately; the returned document will include the status from SignWell and each recipient will include a `signing_url` when available.
 
 ---
 
@@ -924,7 +969,7 @@ sw templates list --all --json       # NDJSON stream of all templates
 | `--template-ids` | `string[]` | | Filter by template ID(s), comma-separated or repeated |
 | `--all` / `--all-pages` | `boolean` | `false` | Fetch all pages |
 
-**API:** `GET /document_templates?page={page}&per_page={per_page}&query={query}`
+**API:** `GET /document_templates?page={page}&limit={limit}&query={query}`
 
 Template list filters are serialized into `query=` and joined with ` AND `. Supported CLI filter keys are `name`, `status`, `start_date`, `end_date`, and `template_ids`. Dates must use `YYYY-MM-DD`, and `OR` filters are not supported.
 
@@ -1434,6 +1479,7 @@ All `--json` output follows this envelope format, with two exceptions:
   test_mode?: boolean;
   recipients: Recipient[];
   files?: DocumentFile[];
+  fields?: DocumentField[][];
 }
 ```
 
@@ -1450,6 +1496,23 @@ All `--json` output follows this envelope format, with two exceptions:
   embedded_signing?: boolean;
   signed_at?: string;              // ISO 8601
   last_viewed_at?: string;
+}
+```
+
+### DocumentField
+
+```typescript
+{
+  x: number;                 // left edge from the page's left side, in SignWell pixels
+  y: number;                 // top edge from the page's top side, in SignWell pixels
+  page: number;              // 1-based page number within the file
+  recipient_id: string;      // "1" for the first --recipient, "2" for the second, etc.
+  type: string;              // e.g. "signature", "initials", "text", "date", "checkbox"
+  required?: boolean;
+  api_id?: string;
+  width?: number;            // field box width in SignWell pixels
+  height?: number;           // field box height in SignWell pixels
+  value?: string | boolean | number;
 }
 ```
 

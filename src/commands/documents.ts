@@ -43,6 +43,7 @@ export interface DocumentListCliOptions {
 const DATE_FILTER_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const OR_FILTER_PATTERN = /(^|\s)OR(\s|$)/i;
 const DOCUMENT_LIST_MAX_LIMIT = 50;
+const DOCUMENT_FIELD_REQUIRED_KEYS = ['x', 'y', 'page', 'recipient_id', 'type'] as const;
 
 function normalizedString(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
@@ -101,6 +102,154 @@ function addQueryFilter(parts: string[], key: string, value: string | undefined)
   }
 }
 
+function hasOwn(obj: Record<string, unknown>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(obj, key);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function formatFieldPath(fileIndex: number, fieldIndex: number): string {
+  return `fields[${fileIndex}][${fieldIndex}]`;
+}
+
+function requireNumberField(
+  field: Record<string, unknown>,
+  key: 'x' | 'y',
+  fileIndex: number,
+  fieldIndex: number,
+): number {
+  const value = field[key];
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new UsageError(
+      `${formatFieldPath(fileIndex, fieldIndex)}.${key} must be a number`,
+      'Field coordinates must use SignWell page pixels. Convert 72-DPI PDF points to pixels before sending.',
+    );
+  }
+  return value;
+}
+
+function requireIntegerField(
+  field: Record<string, unknown>,
+  key: 'page',
+  fileIndex: number,
+  fieldIndex: number,
+): number {
+  const value = field[key];
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 1) {
+    throw new UsageError(
+      `${formatFieldPath(fileIndex, fieldIndex)}.${key} must be a positive integer`,
+      'Pages are 1-based within each uploaded file.',
+    );
+  }
+  return value;
+}
+
+function requireStringField(
+  field: Record<string, unknown>,
+  key: 'recipient_id' | 'type',
+  fileIndex: number,
+  fieldIndex: number,
+): string {
+  const value = field[key];
+  if (typeof value !== 'string' || value.trim() === '') {
+    throw new UsageError(
+      `${formatFieldPath(fileIndex, fieldIndex)}.${key} must be a non-empty string`,
+      'Use recipient_id "1" for the first --recipient, "2" for the second, and so on.',
+    );
+  }
+  return value;
+}
+
+export function validateDocumentFields(value: unknown, fileCount: number): docsApi.DocumentFields {
+  if (!Array.isArray(value) || value.some((entry) => !Array.isArray(entry))) {
+    throw new UsageError(
+      '--fields must contain a two-dimensional JSON array',
+      'Example: [[{"x":346.67,"y":549.33,"page":1,"recipient_id":"1","type":"signature","width":293.33,"height":66.67}]]',
+    );
+  }
+
+  if (value.length !== fileCount) {
+    throw new UsageError(
+      `--fields must contain one array per uploaded file (${fileCount} expected, got ${value.length})`,
+      'For files without fields, include an empty array at that file position.',
+    );
+  }
+
+  const fieldGroups = value as unknown[][];
+
+  return fieldGroups.map((fileFields: unknown[], fileIndex: number) =>
+    fileFields.map((field: unknown, fieldIndex: number) => {
+      if (!isRecord(field)) {
+        throw new UsageError(
+          `${formatFieldPath(fileIndex, fieldIndex)} must be an object`,
+          'Each field must include x, y, page, recipient_id, and type.',
+        );
+      }
+
+      for (const key of DOCUMENT_FIELD_REQUIRED_KEYS) {
+        if (!hasOwn(field, key)) {
+          throw new UsageError(
+            `${formatFieldPath(fileIndex, fieldIndex)} is missing required key "${key}"`,
+            'Each document field must include x, y, page, recipient_id, and type.',
+          );
+        }
+      }
+
+      return {
+        ...field,
+        x: requireNumberField(field, 'x', fileIndex, fieldIndex),
+        y: requireNumberField(field, 'y', fileIndex, fieldIndex),
+        page: requireIntegerField(field, 'page', fileIndex, fieldIndex),
+        recipient_id: requireStringField(field, 'recipient_id', fileIndex, fieldIndex),
+        type: requireStringField(field, 'type', fileIndex, fieldIndex),
+      };
+    }),
+  );
+}
+
+export function parseDocumentFieldsJson(content: string, fileCount: number): docsApi.DocumentFields {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(content);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    throw new UsageError('Invalid JSON in --fields file', message);
+  }
+
+  return validateDocumentFields(parsed, fileCount);
+}
+
+export function readDocumentFields(filePath: string, fileCount: number): docsApi.DocumentFields {
+  let content: string;
+  try {
+    content = fs.readFileSync(filePath, 'utf-8');
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    throw new UsageError(`Could not read --fields file: ${filePath}`, message);
+  }
+
+  return parseDocumentFieldsJson(content, fileCount);
+}
+
+export function hasDocumentFields(fields: docsApi.DocumentFields | undefined): boolean {
+  return fields?.some((fileFields) => fileFields.length > 0) ?? false;
+}
+
+export function ensureDocumentCreateCanSend(
+  shouldSend: boolean,
+  useTextTags: boolean,
+  fields: docsApi.DocumentFields | undefined,
+): void {
+  if (shouldSend && !useTextTags && !hasDocumentFields(fields)) {
+    throw new UsageError(
+      'Cannot send a file-based document without fields. Omit --send to create a draft, add --text-tags when the file contains SignWell text tags, or pass --fields with coordinate fields.',
+      'Create-and-send requires fields in the initial SignWell API request.',
+    );
+  }
+}
+
 export function buildDocumentListQuery(options: DocumentListCliOptions): string | undefined {
   const parts: string[] = [];
   const rawQuery = normalizeRawQuery(options.query);
@@ -153,8 +302,9 @@ export function registerDocumentsCommand(yargs: Argv): Argv {
             .option('subject', { type: 'string', describe: 'Email subject line' })
             .option('message', { type: 'string', describe: 'Email message body' })
             .option('draft', { type: 'boolean', describe: 'Create as draft (default)' })
-            .option('send', { type: 'boolean', describe: 'Send after creation; requires --text-tags for file uploads' })
+            .option('send', { type: 'boolean', describe: 'Send on creation; requires --text-tags or --fields' })
             .option('text-tags', { type: 'boolean', describe: 'Enable text tag parsing before sending' })
+            .option('fields', { type: 'string', describe: 'Path to document fields JSON file' })
             .option('redirect-url', { type: 'string', describe: 'Redirect URL after signing' })
             .option('signing-order', { type: 'boolean', describe: 'Enforce sequential signing order' })
             .option('expiration-days', { type: 'number', describe: 'Days until expiration' })
@@ -168,11 +318,8 @@ export function registerDocumentsCommand(yargs: Argv): Argv {
             if (shouldSend && argv.draft) {
               throw new UsageError('Cannot use --send and --draft together');
             }
-            if (shouldSend && !useTextTags) {
-              throw new UsageError(
-                'Cannot send a file-based document without fields. Omit --send to create a draft, or add --text-tags when the file contains SignWell text tags.',
-                'For most uploaded contracts, create a draft first and add fields in SignWell.',
-              );
+            if (!argv.fields) {
+              ensureDocumentCreateCanSend(shouldSend, useTextTags, undefined);
             }
 
             createApiClient({
@@ -192,6 +339,11 @@ export function registerDocumentsCommand(yargs: Argv): Argv {
 
             spin.text = 'Creating document...';
 
+            const fields = argv.fields
+              ? readDocumentFields(argv.fields as string, files.length)
+              : undefined;
+            ensureDocumentCreateCanSend(shouldSend, useTextTags, fields);
+
             const recipients = (argv.recipient as string[]).map(parseRecipient);
             const docName = (argv.name as string) || files[0]?.name || 'Untitled';
 
@@ -209,33 +361,29 @@ export function registerDocumentsCommand(yargs: Argv): Argv {
               name: docName,
               subject: argv.subject as string | undefined,
               message: argv.message as string | undefined,
-              draft: true,
+              draft: !shouldSend,
               text_tags: useTextTags ? true : undefined,
               redirect_url: argv.redirectUrl as string | undefined,
               apply_signing_order: argv.signingOrder as boolean | undefined,
               embedded_signing: hasEmbedded ? true : undefined,
               expires_in: argv.expirationDays as number | undefined,
               reminders: argv.reminderDays as number[] | undefined,
+              fields,
               files,
               recipients: mappedRecipients,
             });
 
-            let outputDoc = doc;
-            if (shouldSend) {
-              spin.text = 'Sending document...';
-              outputDoc = await docsApi.sendDocument(doc.id);
-            }
             spin.succeed(shouldSend ? 'Document sent' : 'Draft created');
 
             if (isJsonMode()) {
-              printJson(outputDoc);
+              printJson(doc);
             } else {
-              printInfo(`Document ID: ${outputDoc.id}`);
-              printInfo(`Name: ${outputDoc.name}`);
-              printInfo(`Status: ${statusColor(outputDoc.status)}`);
+              printInfo(`Document ID: ${doc.id}`);
+              printInfo(`Name: ${doc.name}`);
+              printInfo(`Status: ${statusColor(doc.status)}`);
 
-              if (outputDoc.recipients) {
-                for (const r of outputDoc.recipients) {
+              if (doc.recipients) {
+                for (const r of doc.recipients) {
                   printInfo(`  ${r.name || r.email}: ${r.signing_url || '-'}`);
                   if (r.embedded_signing_url) {
                     printInfo(`  Embedded URL: ${r.embedded_signing_url}`);
