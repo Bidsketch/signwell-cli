@@ -2,7 +2,14 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import nock from 'nock';
 import { createApiClient, resetClient } from '../../src/api/client.js';
 import { getDocument, listDocuments, createDocument, sendDocument, deleteDocument } from '../../src/api/documents.js';
-import { buildDocumentListPageParams, buildDocumentListParams, buildDocumentListQuery } from '../../src/commands/documents.js';
+import {
+  buildDocumentListPageParams,
+  buildDocumentListParams,
+  buildDocumentListQuery,
+  ensureDocumentCreateCanSend,
+  parseDocumentFieldsJson,
+  validateDocumentFields,
+} from '../../src/commands/documents.js';
 import { UsageError } from '../../src/lib/errors.js';
 import documentFixture from '../fixtures/document.json';
 import documentsListFixture from '../fixtures/documents-list.json';
@@ -180,6 +187,57 @@ describe('documents API', () => {
     expect(createScope.isDone()).toBe(true);
   });
 
+  it('creates and sends a document in one request when draft is false and fields are supplied', async () => {
+    const fields = [[{
+      x: 346.67,
+      y: 549.33,
+      page: 1,
+      recipient_id: '1',
+      type: 'signature',
+      required: true,
+      api_id: 'Signature_1',
+      width: 293.33,
+      height: 66.67,
+    }]];
+
+    const createScope = nock(BASE_URL)
+      .post('/documents', (body: any) => {
+        expect(body.draft).toBe(false);
+        expect(body.fields).toEqual(fields);
+        expect(body.recipients[0].id).toBe('1');
+        return true;
+      })
+      .reply(201, { ...documentFixture, status: 'sent' });
+
+    const doc = await createDocument({
+      name: 'Service Agreement',
+      files: [{ name: 'contract.pdf', file_base64: 'dGVzdA==' }],
+      recipients: [{ email: 'alice@example.com', name: 'Alice Smith' }],
+      draft: false,
+      fields,
+    });
+
+    expect(doc.status).toBe('sent');
+    expect(createScope.isDone()).toBe(true);
+  });
+
+  it('creates and sends a text-tagged document in one request when draft is false', async () => {
+    const createScope = nock(BASE_URL)
+      .post('/documents', (body: any) => body.draft === false && body.text_tags === true)
+      .reply(201, { ...documentFixture, status: 'sent' });
+
+    const doc = await createDocument({
+      name: 'Tagged Service Agreement',
+      files: [{ name: 'contract.pdf', file_base64: 'dGVzdA==' }],
+      recipients: [{ email: 'alice@example.com', name: 'Alice Smith' }],
+      draft: false,
+      text_tags: true,
+    });
+
+    expect(doc.status).toBe('sent');
+    expect(createScope.isDone()).toBe(true);
+  });
+
   it('sends a document', async () => {
     nock(BASE_URL)
       .post('/documents/doc_abc123/send')
@@ -197,7 +255,7 @@ describe('documents API', () => {
     await expect(deleteDocument('doc_abc123')).resolves.not.toThrow();
   });
 
-  it('creates a document with draft:true when --send is used, then sends explicitly', async () => {
+  it('can create a draft and send it explicitly', async () => {
     const draftDoc = { ...documentFixture, status: 'draft' };
     const sentDoc = { ...documentFixture, status: 'sent' };
 
@@ -237,5 +295,54 @@ describe('documents API', () => {
     } catch (err: any) {
       expect(err.response?.status).toBe(404);
     }
+  });
+});
+
+describe('document field validation', () => {
+  const validField = {
+    x: 346.67,
+    y: 549.33,
+    page: 1,
+    recipient_id: '1',
+    type: 'signature',
+    required: true,
+  };
+
+  it('accepts a two-dimensional fields array with one entry per file', () => {
+    expect(validateDocumentFields([[validField]], 1)).toEqual([[validField]]);
+  });
+
+  it('rejects non-two-dimensional fields JSON', () => {
+    expect(() => validateDocumentFields([validField], 1)).toThrow(UsageError);
+    expect(() => parseDocumentFieldsJson('{"x":260}', 1)).toThrow(UsageError);
+  });
+
+  it('rejects fields arrays that do not match the uploaded file count', () => {
+    expect(() => validateDocumentFields([[validField]], 2)).toThrow(UsageError);
+  });
+
+  it('rejects fields missing required keys', () => {
+    expect(() => validateDocumentFields([[
+      { x: 346.67, y: 549.33, page: 1, recipient_id: '1' },
+    ]], 1)).toThrow(UsageError);
+  });
+
+  it('rejects invalid required field value types', () => {
+    expect(() => validateDocumentFields([[
+      { ...validField, x: '260' },
+    ]], 1)).toThrow(UsageError);
+    expect(() => validateDocumentFields([[
+      { ...validField, page: 0 },
+    ]], 1)).toThrow(UsageError);
+  });
+
+  it('rejects send without text tags or non-empty fields', () => {
+    expect(() => ensureDocumentCreateCanSend(true, false, undefined)).toThrow(UsageError);
+    expect(() => ensureDocumentCreateCanSend(true, false, [[]])).toThrow(UsageError);
+  });
+
+  it('allows send with text tags or non-empty coordinate fields', () => {
+    expect(() => ensureDocumentCreateCanSend(true, true, undefined)).not.toThrow();
+    expect(() => ensureDocumentCreateCanSend(true, false, [[validField]])).not.toThrow();
   });
 });

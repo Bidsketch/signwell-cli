@@ -57,6 +57,13 @@ sw documents create \
   --name "Tagged Contract" \
   --text-tags --send --json
 
+# Send immediately with explicit coordinate fields
+sw documents create \
+  --file contract.pdf \
+  --recipient "email@example.com:Recipient Name" \
+  --name "Coordinate Field Contract" \
+  --fields fields.json --send --json
+
 # Multiple files and recipients
 sw documents create \
   --file contract.pdf --file appendix.pdf \
@@ -115,6 +122,10 @@ sw documents recipients update <document-id> \
 ```
 
 **Recipient format:** `email:name` or `email:name:embedded`
+
+For `sw documents create --fields fields.json`, the fields file must be a two-dimensional JSON array with one array per uploaded file. Document fields use `recipient_id`; the first `--recipient` maps to `"1"`, the second maps to `"2"`, and so on. Use an empty array for any file that has no fields.
+
+Document field coordinates are pixel values for the field box on the target page. `x` is the left edge from the page's left side, `y` is the top edge from the page's top side, and `width`/`height` are the field box dimensions. If you calculate positions from a PDF library such as ReportLab or pdf-lib, convert PDF points to SignWell pixels with `96 / 72`, then convert the vertical origin. To align the bottom of a field box to a visible underline or baseline, use `signwellY = (pdfPageHeightPt - pdfYFromBottomPt - fieldHeightPt) * 96 / 72`, `signwellX = pdfXFromLeftPt * 96 / 72`, and scale `width`/`height` by `96 / 72`. Use `pdfPageHeightPt - pdfYFromBottomPt` only if the PDF coordinate is already the intended top edge. If the source coordinates are already SignWell pixels, do not apply the PDF point scale.
 
 ### Templates
 
@@ -275,7 +286,7 @@ sw schema bulk-send.create
 6. **For bulk operations**, always validate CSV first with `sw bulk-send validate` before creating.
 7. **Pagination and filters**: Use `--all --json` to get all results as NDJSON stream, or `--page N --per-page N` / `--limit N` for specific pages. Document list page size must be 1-50. Document list sends only `page`, `limit`, and `query` to the API. Filters use API `query=` syntax; prefer flags like `--name`, `--status`, `--person`, `--start-date`, `--end-date`, and `--document-ids`, or pass raw syntax with `--query "name:Classic AND status:completed"`. Use `AND`; `OR` and `keyword` are not supported document filters.
 8. **Exit codes**: 0=success, 1=general error, 2=usage error, 3=auth error, 4=rate limited, 5=file error, 6=CSV error.
-9. **Document sends**: Document and template creation default to drafts. Use `sw documents send <id> --json` after the draft has complete fields.
+9. **Document sends**: Document and template creation default to drafts. Use `sw documents create --fields fields.json --send --json` or `--text-tags --send --json` for one-shot sends, or use `sw documents send <id> --json` after a draft has complete fields.
 10. **File uploads**: Supported local uploads are PDF, Word, PowerPoint, Excel, Pages, Keynote, Numbers, JPG/JPEG, PNG, TIFF/TIF, WEBP, HTML, and HTM.
 
 ## Common Workflows
@@ -284,6 +295,7 @@ sw schema bulk-send.create
 1. `sw auth status --json` — verify authenticated
 2. `sw documents create --file doc.pdf --recipient "email:Name" --name "Doc Name" --json` — creates a draft for adding fields in SignWell
 3. `sw documents create --file tagged.pdf --recipient "email:Name" --name "Doc Name" --text-tags --send --json` — creates and sends when the file contains SignWell text tags
+4. `sw documents create --file doc.pdf --recipient "email:Name" --fields fields.json --send --json` — creates and sends with explicit field coordinates
 
 ### Use a template
 1. `sw templates list --json` — find template ID

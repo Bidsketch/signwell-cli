@@ -73,6 +73,28 @@ describe('schema command', () => {
     expect(properties.document_ids.type).toBe('array');
   });
 
+  it('exposes document create coordinate fields', () => {
+    runSchemaCommand(['schema', 'documents.create', '--json']);
+
+    const output = stdoutSpy.mock.calls.map(([chunk]: [unknown]) => String(chunk)).join('');
+    const schema = JSON.parse(output);
+    const fields = schema.input_schema.properties.fields;
+    const field = fields.items.items;
+
+    expect(fields.type).toBe('array');
+    expect(fields.items.type).toBe('array');
+    expect(field.type).toBe('object');
+    expect(field.required).toEqual(expect.arrayContaining([
+      'x',
+      'y',
+      'page',
+      'recipient_id',
+      'type',
+    ]));
+    expect(field.properties.x.type).toBe('number');
+    expect(field.properties.recipient_id.type).toBe('string');
+  });
+
   it('exposes template list pagination and filter inputs', () => {
     runSchemaCommand(['schema', 'templates.list', '--json']);
 

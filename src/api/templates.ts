@@ -50,7 +50,7 @@ export async function listTemplates(
   const pageSize = params.limit ?? params.per_page;
   const apiParams = {
     ...(params.page !== undefined ? { page: params.page } : {}),
-    ...(pageSize !== undefined ? { per_page: pageSize } : {}),
+    ...(pageSize !== undefined ? { limit: pageSize } : {}),
     ...(params.query !== undefined ? { query: params.query } : {}),
   };
   const { data } = await client.get('/document_templates', { params: apiParams });

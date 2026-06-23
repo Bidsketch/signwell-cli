@@ -19,6 +19,38 @@ const FieldInput = z.object({
   value: z.string(),
 });
 
+const DocumentFieldValue = z.union([z.string(), z.boolean(), z.number()]);
+const DropdownOption = z.union([
+  z.string(),
+  z.object({
+    name: z.string(),
+    api_id: z.string().optional(),
+    is_other: z.boolean().optional(),
+  }),
+]);
+
+const DocumentFieldInput = z.object({
+  x: z.number(),
+  y: z.number(),
+  page: z.number(),
+  recipient_id: z.string(),
+  type: z.string(),
+  required: z.boolean().optional(),
+  label: z.string().optional(),
+  value: DocumentFieldValue.optional(),
+  api_id: z.string().optional(),
+  name: z.string().optional(),
+  validation: z.string().optional(),
+  fixed_width: z.boolean().optional(),
+  lock_sign_date: z.boolean().optional(),
+  date_format: z.string().optional(),
+  height: z.number().optional(),
+  width: z.number().optional(),
+  options: z.array(DropdownOption).optional(),
+  default_option: z.string().optional(),
+  allow_other: z.boolean().optional(),
+}).passthrough();
+
 const schemas: Record<string, { description: string; input: z.ZodType; output: z.ZodType }> = {
   'documents.create': {
     description: 'Create a new document for signing',
@@ -33,6 +65,7 @@ const schemas: Record<string, { description: string; input: z.ZodType; output: z
       embedded_signing: z.boolean().optional(),
       expires_in: z.number().optional(),
       reminders: z.array(z.number()).optional(),
+      fields: z.array(z.array(DocumentFieldInput)).optional(),
       files: z.array(FileInput).min(1),
       recipients: z.array(RecipientInput).min(1),
       test_mode: z.boolean().optional(),

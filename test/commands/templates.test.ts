@@ -39,17 +39,27 @@ describe('templates API', () => {
   it('lists templates', async () => {
     nock(BASE_URL)
       .get('/document_templates')
-      .query({ page: 1, per_page: 20 })
+      .query({ page: 1, limit: 20 })
       .reply(200, templatesListFixture);
 
     const result = await listTemplates({ page: 1, per_page: 20 });
     expect(result.data).toHaveLength(2);
   });
 
-  it('maps legacy limit pagination input to API per_page', async () => {
+  it('maps per_page pagination input to API limit', async () => {
     nock(BASE_URL)
       .get('/document_templates')
-      .query({ page: 1, per_page: 100 })
+      .query({ page: 1, limit: 100 })
+      .reply(200, templatesListFixture);
+
+    const result = await listTemplates({ page: 1, per_page: 100 });
+    expect(result.per_page).toBe(100);
+  });
+
+  it('maps limit pagination input to API limit', async () => {
+    nock(BASE_URL)
+      .get('/document_templates')
+      .query({ page: 1, limit: 100 })
       .reply(200, templatesListFixture);
 
     const result = await listTemplates({ page: 1, limit: 100 });
@@ -61,7 +71,7 @@ describe('templates API', () => {
 
     nock(BASE_URL)
       .get('/document_templates')
-      .query({ page: 2, per_page: 30, query })
+      .query({ page: 2, limit: 30, query })
       .reply(200, templatesListFixture);
 
     const result = await listTemplates({ page: 2, per_page: 30, query });
@@ -74,7 +84,7 @@ describe('templates API', () => {
     nock(BASE_URL)
       .get('/document_templates')
       .query((params) => {
-        expect(params).toEqual({ page: '2', per_page: '30', query });
+        expect(params).toEqual({ page: '2', limit: '30', query });
         return true;
       })
       .reply(200, templatesListFixture);
@@ -121,7 +131,7 @@ describe('templates API', () => {
       status: 'Available',
     })).toEqual({
       page: 2,
-      per_page: 50,
+      limit: 50,
       query: 'status:Available',
     });
   });
@@ -134,7 +144,7 @@ describe('templates API', () => {
       per_page: 40,
     })).toEqual({
       page: 2,
-      per_page: 30,
+      limit: 30,
       query: undefined,
     });
   });
@@ -142,7 +152,7 @@ describe('templates API', () => {
   it('builds all-page template list params with the current query and page size', () => {
     expect(buildTemplateListPageParams('name:Codex AND status:Available', 3, 100)).toEqual({
       page: 3,
-      per_page: 100,
+      limit: 100,
       query: 'name:Codex AND status:Available',
     });
   });

@@ -2,6 +2,17 @@ import { getClient, type ApiClientOptions } from './client.js';
 import type { Document, DocumentFile, PaginatedResponse } from '../types/api.js';
 import { normalizePaginatedResponse, type PaginationParams } from '../lib/pagination.js';
 
+export interface DocumentField {
+  x: number;
+  y: number;
+  page: number;
+  recipient_id: string;
+  type: string;
+  [key: string]: unknown;
+}
+
+export type DocumentFields = DocumentField[][];
+
 export interface CreateDocumentPayload {
   name?: string;
   subject?: string;
@@ -14,6 +25,7 @@ export interface CreateDocumentPayload {
   test_mode?: boolean;
   expires_in?: number;
   reminders?: number[];
+  fields?: DocumentFields;
   files: DocumentFile[];
   recipients: Array<{
     id?: string;
