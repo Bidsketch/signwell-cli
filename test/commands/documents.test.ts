@@ -1,5 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import nock from 'nock';
+import yargs from 'yargs/yargs';
 import { createApiClient, resetClient } from '../../src/api/client.js';
 import { getDocument, listDocuments, createDocument, sendDocument, deleteDocument } from '../../src/api/documents.js';
 import {
@@ -8,6 +12,7 @@ import {
   buildDocumentListQuery,
   ensureDocumentCreateCanSend,
   parseDocumentFieldsJson,
+  registerDocumentsCommand,
   validateDocumentFields,
 } from '../../src/commands/documents.js';
 import { UsageError } from '../../src/lib/errors.js';
@@ -357,5 +362,62 @@ describe('document field validation', () => {
   it('allows send with text tags or non-empty coordinate fields', () => {
     expect(() => ensureDocumentCreateCanSend(true, true, undefined)).not.toThrow();
     expect(() => ensureDocumentCreateCanSend(true, false, [[validField]])).not.toThrow();
+  });
+});
+
+describe('documents download', () => {
+  let tmpDir: string;
+  let originalCwd: string;
+
+  beforeEach(() => {
+    originalCwd = process.cwd();
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'signwell-download-'));
+    fs.writeFileSync(
+      path.join(tmpDir, 'config.json'),
+      JSON.stringify({ profiles: { default: { api_key: 'test-api-key' } }, active_profile: 'default' }),
+    );
+    process.env.SIGNWELL_CONFIG_PATH = path.join(tmpDir, 'config.json');
+    process.chdir(tmpDir);
+  });
+
+  afterEach(() => {
+    process.chdir(originalCwd);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+    delete process.env.SIGNWELL_CONFIG_PATH;
+  });
+
+  function mockCompletedDocument(id: string, pdf: string): void {
+    nock(BASE_URL)
+      .get(`/documents/${id}`)
+      .reply(200, { ...documentFixture, id, name: 'Service Agreement', status: 'completed' })
+      .get(`/documents/${id}/completed_pdf`)
+      .reply(200, Buffer.from(pdf));
+  }
+
+  async function download(args: string[]): Promise<void> {
+    const parser = yargs(['documents', 'download', ...args, '--quiet']).exitProcess(false);
+    registerDocumentsCommand(parser);
+    await parser.parseAsync();
+  }
+
+  it('keeps both files when two documents share a title', async () => {
+    mockCompletedDocument('doc_one', 'first signed pdf');
+    mockCompletedDocument('doc_two', 'second signed pdf');
+
+    await download(['doc_one']);
+    await download(['doc_two']);
+
+    const files = fs.readdirSync(tmpDir).filter((f) => f.endsWith('.pdf')).sort();
+    expect(files).toEqual(['Service_Agreement-doc_one-signed.pdf', 'Service_Agreement-doc_two-signed.pdf']);
+    expect(fs.readFileSync(files[0], 'utf-8')).toBe('first signed pdf');
+    expect(fs.readFileSync(files[1], 'utf-8')).toBe('second signed pdf');
+  });
+
+  it('writes to the path given with --output', async () => {
+    mockCompletedDocument('doc_one', 'first signed pdf');
+
+    await download(['doc_one', '--output', 'archive.pdf']);
+
+    expect(fs.readFileSync('archive.pdf', 'utf-8')).toBe('first signed pdf');
   });
 });
