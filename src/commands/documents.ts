@@ -635,8 +635,9 @@ export function registerDocumentsCommand(yargs: Argv): Argv {
             }
 
             const buffer = await docsApi.downloadDocument(argv.id as string);
+            // Include the ID: documents sent from one template share a name and would overwrite each other.
             const outputPath = (argv.output as string) ||
-              `${(doc.name || argv.id).replace(/[^a-zA-Z0-9._-]/g, '_')}-signed.pdf`;
+              `${[doc.name, argv.id].filter(Boolean).join('-').replace(/[^a-zA-Z0-9._-]/g, '_')}-signed.pdf`;
 
             fs.writeFileSync(outputPath, buffer);
             spin.succeed(`Downloaded to ${outputPath}`);

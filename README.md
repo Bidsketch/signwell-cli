@@ -844,7 +844,7 @@ sw documents download doc_abc123 --open
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `--output, -o` | `string` | `{name}-signed.pdf` | Output file path |
+| `--output, -o` | `string` | `{name}-{id}-signed.pdf` | Output file path |
 | `--open` | `boolean` | `false` | Open file after download |
 
 **API:** `GET /documents/{id}/completed_pdf`
@@ -853,7 +853,7 @@ sw documents download doc_abc123 --open
 
 **JSON output:**
 ```json
-{ "success": true, "data": { "id": "doc_abc123", "output": "contract-signed.pdf", "size": 102400 }, "error": null, "meta": {} }
+{ "success": true, "data": { "id": "doc_abc123", "output": "contract-doc_abc123-signed.pdf", "size": 102400 }, "error": null, "meta": {} }
 ```
 
 ---
